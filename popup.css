@@ -232,6 +232,48 @@ body {
 .grp-item .icon { flex: 0 0 auto; }
 .panel-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
 
+/* 导出面板（与管理页一致的勾选树） */
+.exp-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #374151;
+  margin-bottom: 8px;
+}
+.exp-mode { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.exp-mode input { accent-color: #4f46e5; }
+.pexp-tree {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.exp-folder { margin: 2px 0; }
+.exp-folder > summary {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 6px; border-radius: 8px; cursor: pointer;
+  list-style: none; user-select: none; font-weight: 600; color: #374151;
+  white-space: nowrap; overflow: hidden;
+}
+.exp-folder > summary::-webkit-details-marker { display: none; }
+.exp-folder > summary:hover { background: #f5f7ff; }
+.exp-folder > summary .count { font-weight: 400; color: #9ca3af; font-size: 12px; }
+.exp-children { margin-left: 18px; border-left: 1px dashed #e5e7eb; padding-left: 8px; }
+.exp-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 6px; border-radius: 8px;
+}
+.exp-row:hover { background: #f9fafb; }
+.exp-row input { accent-color: #4f46e5; flex: 0 0 auto; }
+.exp-row .exp-name {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: #4b5563;
+}
+
 .actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -54,6 +54,22 @@
     </div>
   </div>
 
+  <!-- 导出面板：与管理页一致（全部 / 自定义勾选分组或组内书签） -->
+  <div id="exportPanel" class="overlay hidden">
+    <div class="panel">
+      <div class="panel-title">导出书签</div>
+      <div class="exp-modes">
+        <label class="exp-mode"><input type="radio" name="pexpMode" value="all" checked /> 全部书签</label>
+        <label class="exp-mode"><input type="radio" name="pexpMode" value="custom" /> 自定义选择</label>
+      </div>
+      <div id="pexpTree" class="pexp-tree hidden"></div>
+      <div class="panel-actions">
+        <button id="pexpCancel" class="btn">取消</button>
+        <button id="pexpDo" class="btn primary">导出</button>
+      </div>
+    </div>
+  </div>
+
   <script src="common.js"></script>
   <script src="popup.js"></script>
 </body>

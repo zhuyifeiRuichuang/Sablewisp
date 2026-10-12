@@ -21,10 +21,6 @@ function folderHasMatch(node) {
   if (!node.children) return false;
   return node.children.some((c) => (c.url ? leafMatch(c) : folderHasMatch(c)));
 }
-function countBookmarks(node) {
-  if (!node.children) return 0;
-  return node.children.reduce((n, c) => n + (c.url ? 1 : countBookmarks(c)), 0);
-}
 // 仅统计当前搜索条件下可见的书签数量
 function countVisible(node) {
   if (!node.children) return 0;
@@ -89,11 +85,13 @@ function renderFolderNode(node) {
   if (!inner) return '';
 
   const total = countVisible(node);
+  const isTopRoot = ROOTS.some((r) => r.id === node.id);   // 顶层根（书签栏/其他书签）不可删除
   return `<details class="folder" open>
     <summary>
       📁 ${escapeHtml(node.title || '未命名')}
       <span class="count">(${total})</span>
       <span class="open-all" data-folder="${node.id}">打开全部</span>
+      ${isTopRoot ? '' : `<span class="del-folder" data-folder="${node.id}">删除分组</span>`}
     </summary>
     <div class="children">${inner}</div>
   </details>`;
@@ -134,6 +132,12 @@ function bindRowEvents() {
       openAllInFolder(el.getAttribute('data-folder'));
     });
   });
+  content.querySelectorAll('.del-folder').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeFolder(el.getAttribute('data-folder'));
+    });
+  });
 }
 
 function openAllInFolder(folderId) {
@@ -158,6 +162,16 @@ function findNode(list, id) {
 function removeBookmark(id) {
   if (!confirm('确定删除该书签？')) return;
   chrome.bookmarks.remove(id, () => { reload(); });
+}
+
+// 删除整个分组（文件夹及其全部子级书签/子分组）
+function removeFolder(folderId) {
+  const node = findNode(ROOTS, folderId);
+  if (!node) return;
+  const name = node.title || '未命名';
+  const n = countBookmarks(node);
+  if (!confirm(`确定删除分组「${name}」？\n\n该分组内的 ${n} 个书签（含子分组）将一并删除，此操作不可恢复。`)) return;
+  chrome.bookmarks.removeTree(folderId, () => { reload(); });
 }
 
 /* ---------- 编辑弹窗 ---------- */
@@ -206,6 +220,21 @@ function renderBadPanel() {
     el.addEventListener('click', () => chrome.tabs.create({ url: el.getAttribute('data-open') })));
   $('badList').querySelectorAll('[data-del]').forEach((el) =>
     el.addEventListener('click', () => { chrome.bookmarks.remove(el.getAttribute('data-del'), () => reload()); }));
+}
+
+/* ---------- 不可达清单：批量删除勾选项 ---------- */
+function deleteCheckedBad() {
+  const ids = Array.from(document.querySelectorAll('#badList .bad-ck:checked'))
+    .map((el) => el.getAttribute('data-id'));
+  if (ids.length === 0) { alert('请先勾选要删除的不可达书签（支持表头「全选」）'); return; }
+  if (!confirm(`确定删除勾选的 ${ids.length} 个不可达书签？此操作不可恢复。`)) return;
+  let done = 0;
+  ids.forEach((id) => {
+    chrome.bookmarks.remove(id, () => {
+      delete STATUS[id];
+      if (++done === ids.length) reload();
+    });
+  });
 }
 
 /* ---------- 不可达清单：勾选重检（不勾选则重检全部不可达） ---------- */
@@ -305,40 +334,11 @@ async function checkValidity() {
   render();
 }
 
-/* ---------- 导出弹窗：全部 / 自定义（分组或分组内书签） ---------- */
-function renderExpNode(node) {
-  if (node.url) {
-    return `<div class="exp-row leaf">
-      <input type="checkbox" class="exp-ck" data-id="${node.id}" />
-      <span class="exp-name" title="${escapeHtml(node.title)}">${escapeHtml(node.title)}</span>
-    </div>`;
-  }
-  const bm = node.children.filter((c) => c.url);
-  const folders = node.children.filter((c) => !c.url);
-  let inner = folders.map(renderExpNode).join('') +
-    bm.map(renderExpNode).join('');
-  return `<details class="exp-folder" open>
-    <summary>
-      <input type="checkbox" class="exp-ck exp-folder-ck" data-id="${node.id}" />
-      📁 ${escapeHtml(node.title || '未命名')}
-      <span class="count">(${countBookmarks(node)})</span>
-    </summary>
-    <div class="exp-children">${inner}</div>
-  </details>`;
-}
-
+/* ---------- 导出弹窗：全部 / 自定义（与弹窗共用 common.js 的导出树逻辑） ---------- */
 function openExport() {
-  $('expTree').innerHTML = ROOTS.filter((r) => !r.url && r.children)
-    .map(renderExpNode).join('') || '<div class="empty">暂无书签</div>';
+  $('expTree').innerHTML = renderExportTreeHtml(ROOTS);
+  bindExportChecks($('expTree'));
   $('exportModal').classList.remove('hidden');
-
-  // 勾选文件夹 → 联动勾选其全部后代
-  $('expTree').querySelectorAll('.exp-folder-ck').forEach((ck) => {
-    ck.addEventListener('change', () => {
-      const box = ck.closest('details');
-      box.querySelectorAll('.exp-ck').forEach((c) => { c.checked = ck.checked; });
-    });
-  });
 }
 
 function doExport() {
@@ -348,9 +348,7 @@ function doExport() {
   } else {
     const checked = new Set(Array.from($('expTree').querySelectorAll('.exp-ck:checked'))
       .map((el) => el.getAttribute('data-id')));
-    if (checked.size === 0) { alert('请至少勾选一个分组或书签'); return; }
-    const nodes = ROOTS.map((r) => pruneTree(r, checked)).filter(Boolean);
-    exportHtmlFromNodes(nodes);
+    if (!exportFromChecked(ROOTS, checked)) return;
   }
   closeExport();
 }
@@ -411,6 +409,7 @@ function init() {
   });
   $('check').addEventListener('click', checkValidity);
   $('recheck').addEventListener('click', recheckBad);
+  $('badDelete').addEventListener('click', deleteCheckedBad);
   $('badAll').addEventListener('change', (e) => {
     const on = e.target.checked;
     document.querySelectorAll('#badList .bad-ck').forEach((ck) => { ck.checked = on; });

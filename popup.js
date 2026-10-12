@@ -203,6 +203,40 @@ function closeCollect() {
   COLLECT_TAB = null;
 }
 
+/* ---------- 导出面板：与管理页一致的选项（全部 / 自定义勾选） ---------- */
+let ROOTS = [];   // 书签树顶层（书签栏/其他书签的 children）
+
+function loadRoots() {
+  return new Promise((resolve) => {
+    chrome.bookmarks.getTree((tree) => {
+      ROOTS = (tree[0] && tree[0].children) || [];
+      resolve(ROOTS);
+    });
+  });
+}
+
+function openExportPanel() {
+  loadRoots().then((roots) => {
+    $('pexpTree').innerHTML = renderExportTreeHtml(roots);
+    bindExportChecks($('pexpTree'));
+    document.querySelector('input[name="pexpMode"][value="all"]').checked = true;
+    $('pexpTree').classList.add('hidden');
+    $('exportPanel').classList.remove('hidden');
+  });
+}
+
+function doPopupExport() {
+  const mode = document.querySelector('input[name="pexpMode"]:checked').value;
+  if (mode === 'all') {
+    exportHtml(ALL);
+  } else {
+    const checked = new Set(Array.from($('pexpTree').querySelectorAll('.exp-ck:checked'))
+      .map((el) => el.getAttribute('data-id')));
+    if (!exportFromChecked(ROOTS, checked)) return;
+  }
+  $('exportPanel').classList.add('hidden');
+}
+
 /* ---------- 首次使用引导：提示范围胶囊可点击 ---------- */
 function dismissTip() {
   $('tip').classList.add('hidden');
@@ -250,7 +284,15 @@ function init() {
       }
     });
   });
-  $('export').addEventListener('click', () => exportHtml(ALL));
+  $('export').addEventListener('click', openExportPanel);
+  $('pexpCancel').addEventListener('click', () => $('exportPanel').classList.add('hidden'));
+  $('pexpDo').addEventListener('click', doPopupExport);
+  $('exportPanel').addEventListener('click', (e) => { if (e.target === $('exportPanel')) $('exportPanel').classList.add('hidden'); });
+  document.querySelectorAll('input[name="pexpMode"]').forEach((r) => {
+    r.addEventListener('change', () => {
+      $('pexpTree').classList.toggle('hidden', r.value !== 'custom' || !r.checked);
+    });
+  });
   $('collect').addEventListener('click', openCollect);
   $('collectCancel').addEventListener('click', closeCollect);
   $('grpSearch').addEventListener('input', renderGrpList);

@@ -168,6 +168,57 @@ function pruneTree(node, checkedSet) {
   return Object.assign({}, node, { children });
 }
 
+// 统计文件夹内书签总数（含子级）
+function countBookmarks(node) {
+  if (!node || !node.children) return 0;
+  return node.children.reduce((n, c) => n + (c.url ? 1 : countBookmarks(c)), 0);
+}
+
+// 渲染导出勾选树（弹窗与管理页共用，保证两边导出选项完全一致）：
+// 勾选分组 → 导出该分组整棵子树；展开分组只勾部分书签 → 仅导出勾选项（保留层级）
+function renderExportTreeHtml(roots) {
+  function renderNode(node) {
+    if (node.url) {
+      return `<div class="exp-row leaf">
+        <input type="checkbox" class="exp-ck" data-id="${node.id}" />
+        <span class="exp-name" title="${escapeHtml(node.title)}">${escapeHtml(node.title)}</span>
+      </div>`;
+    }
+    const bm = node.children.filter((c) => c.url);
+    const folders = node.children.filter((c) => !c.url);
+    const inner = folders.map(renderNode).join('') + bm.map(renderNode).join('');
+    return `<details class="exp-folder" open>
+      <summary>
+        <input type="checkbox" class="exp-ck exp-folder-ck" data-id="${node.id}" />
+        📁 ${escapeHtml(node.title || '未命名')}
+        <span class="count">(${countBookmarks(node)})</span>
+      </summary>
+      <div class="exp-children">${inner}</div>
+    </details>`;
+  }
+  return roots.filter((r) => !r.url && r.children).map(renderNode).join('')
+    || '<div class="empty">暂无书签</div>';
+}
+
+// 导出树勾选联动：勾选文件夹 → 勾选其全部后代
+function bindExportChecks(container) {
+  container.querySelectorAll('.exp-folder-ck').forEach((ck) => {
+    ck.addEventListener('change', () => {
+      const box = ck.closest('details');
+      box.querySelectorAll('.exp-ck').forEach((c) => { c.checked = ck.checked; });
+    });
+  });
+}
+
+// 按勾选集合执行选择性导出；返回是否已触发导出
+function exportFromChecked(roots, checkedSet) {
+  if (checkedSet.size === 0) { alert('请至少勾选一个分组或书签'); return false; }
+  const nodes = roots.map((r) => pruneTree(r, checkedSet)).filter(Boolean);
+  if (nodes.length === 0) { alert('勾选项无有效内容可导出'); return false; }
+  exportHtmlFromNodes(nodes);
+  return true;
+}
+
 // 导出 Netscape 书签 HTML（全部书签，平铺）
 function exportHtml(bookmarks) {
   const stamp = new Date().toISOString();
