@@ -70,7 +70,14 @@ Sablewisp 解决的是「书签越攒越多、失效链接难以发现、查找�
 
 ## 参与开发
 
-**本仓库不接受 Pull Request。** 如需定制或二次开发，请自行 fork 后维护：
+本项目同时在两个平台维护，两者的协作方式**不同**：
+
+| 平台 | 仓库 | 定位 | 协作方式 |
+|---|---|---|---|
+| GitHub | `zhuyifeiRuichuang/Sablewisp` | 公开镜像 | **不接受社区 PR**，如需定制请 fork 后自行维护 |
+| 腾讯 CNB | `zhuzhupower/Sablewisp` | 主开发仓库 | **更新须提交 PR 并合并**（不接受直接推送 main） |
+
+### GitHub：fork 自行维护
 
 ```bash
 git clone https://github.com/zhuyifeiRuichuang/Sablewisp.git
@@ -78,6 +85,20 @@ cd Sablewisp
 # 修改后按「安装方法」加载本地目录即可实时调试：
 # chrome://extensions → 点击扩展卡片上的刷新图标
 ```
+
+### CNB：分支 → PR → 合并
+
+```bash
+git clone https://cnb.cool/zhuzhupower/Sablewisp.git
+cd Sablewisp
+git checkout -b feat/your-change      # 1. 从 main 切分支
+git commit -am "说明改动"              # 2. 提交改动
+git push origin feat/your-change      # 3. 推送分支
+# 4. 在 CNB 仓库页面创建 Pull Request → 合并到 main
+# 5. 基于 main 发布 Release
+```
+
+### 源码结构
 
 | 文件 | 作用 |
 |---|---|
