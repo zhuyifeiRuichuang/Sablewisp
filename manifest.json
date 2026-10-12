@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "书签管家 - 书签有效性检测与分组管理",
+  "version": "1.0.0",
+  "description": "检测书签有效性并列出不可达网页，支持搜索、分组、按添加时间/网址排序，以及批量导入导出、编辑与删除。",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_title": "书签管家",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "bookmarks",
+    "storage",
+    "tabs"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src *;"
+  }
+}

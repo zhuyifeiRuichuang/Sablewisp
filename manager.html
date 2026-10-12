@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="manager.css" />
+  <title>书签管家 · 管理页</title>
+</head>
+<body>
+  <header class="hd">
+    <div class="hd-left">
+      <span class="logo">🔖</span>
+      <div>
+        <div class="t">书签管家</div>
+        <div class="s" id="stat">加载中…</div>
+      </div>
+    </div>
+    <div class="hd-right">
+      <button id="help" class="btn">帮助</button>
+      <button id="refresh" class="btn">刷新</button>
+      <button id="import" class="btn">导入</button>
+      <button id="export" class="btn">导出</button>
+      <button id="check" class="btn primary">检测有效性</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <input id="q" type="search" class="search" placeholder="搜索书签标题或网址…" />
+    <select id="sort" class="select" title="排序方式">
+      <option value="date_desc">添加时间（新→旧）</option>
+      <option value="date_asc">添加时间（旧→新）</option>
+      <option value="url_asc">网址（A→Z）</option>
+      <option value="title_asc">标题（A→Z）</option>
+    </select>
+    <label class="toggle">
+      <input type="checkbox" id="groupToggle" checked /> 按文件夹分组
+    </label>
+  </div>
+
+  <div id="progress" class="progress hidden"></div>
+
+  <!-- 不可达清单 -->
+  <section id="badPanel" class="bad-panel hidden">
+    <div class="bad-head">
+      <span class="bad-title">⚠ 不可达清单</span>
+      <span id="badCount" class="bad-count"></span>
+      <span class="spacer"></span>
+      <label class="ck-all"><input type="checkbox" id="badAll" /> 全选</label>
+      <button id="recheck" class="btn small">重新检测</button>
+      <button id="toggleBad" class="btn small">收起</button>
+    </div>
+    <ul id="badList" class="bad-list"></ul>
+  </section>
+
+  <main id="content" class="content"></main>
+
+  <!-- 编辑弹窗 -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-title">编辑书签</div>
+      <label>标题</label>
+      <input id="editTitle" type="text" class="modal-input" />
+      <label>网址</label>
+      <input id="editUrl" type="text" class="modal-input" />
+      <div class="modal-actions">
+        <button id="editCancel" class="btn">取消</button>
+        <button id="editSave" class="btn primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导出弹窗 -->
+  <div id="exportModal" class="modal hidden">
+    <div class="modal-box modal-wide">
+      <div class="modal-title">导出书签</div>
+      <div class="export-modes">
+        <label><input type="radio" name="expMode" value="all" checked /> 全部书签</label>
+        <label><input type="radio" name="expMode" value="custom" /> 自定义选择（勾选分组或分组内的书签）</label>
+      </div>
+      <div id="expTree" class="exp-tree hidden"></div>
+      <div class="modal-actions">
+        <button id="exportCancel" class="btn">取消</button>
+        <button id="exportDo" class="btn primary">导出</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="common.js"></script>
+  <script src="manager.js"></script>
+</body>
+</html>

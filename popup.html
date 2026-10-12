@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="popup.css" />
+  <title>书签管家</title>
+</head>
+<body>
+  <header class="hd">
+    <div class="logo">🔖</div>
+    <div>
+      <div class="t">书签管家</div>
+      <div class="s" id="stat">加载中…</div>
+    </div>
+    <button id="help" class="hd-help" title="完整功能说明">?</button>
+  </header>
+
+  <div class="search">
+    <input id="q" type="search" placeholder="搜索 标题 / 网址 / 分组…" autofocus />
+    <div class="scopes" id="scopes">
+      <label class="chip"><input type="checkbox" id="scTitle" checked /><span>标题</span></label>
+      <label class="chip"><input type="checkbox" id="scUrl" checked /><span>网址</span></label>
+      <label class="chip"><input type="checkbox" id="scGrp" checked /><span>分组</span></label>
+      <button id="tipClose" class="tip-close hidden">知道了</button>
+    </div>
+    <div id="tip" class="tip hidden">
+      💡 这三个胶囊可以点击：勾选/取消决定搜索范围（标题、网址、分组名）
+    </div>
+  </div>
+
+  <ul id="list" class="list"></ul>
+
+  <div class="actions">
+    <button id="openManager" class="btn primary">打开管理页</button>
+    <button id="import" class="btn">导入</button>
+    <button id="export" class="btn">导出</button>
+    <button id="check" class="btn">检测有效性</button>
+    <button id="collect" class="btn">收藏当前页</button>
+  </div>
+
+  <!-- 收藏当前页面板：搜索并选择目标分组 -->
+  <div id="collectPanel" class="overlay hidden">
+    <div class="panel">
+      <div class="panel-title">收藏当前页到分组</div>
+      <div id="collectInfo" class="panel-info"></div>
+      <label class="field-label" for="collectTitle">书签标题（可修改）</label>
+      <input id="collectTitle" type="text" class="panel-input" />
+      <input id="grpSearch" type="search" placeholder="搜索分组…" />
+      <ul id="grpList" class="grp-list"></ul>
+      <div class="panel-actions">
+        <button id="collectCancel" class="btn">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="common.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

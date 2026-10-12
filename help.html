@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>书签管家 · 功能说明</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f8fafc; color: #1f2937; line-height: 1.7;
+    }
+    .hd {
+      background: linear-gradient(135deg, #4f46e5, #6366f1);
+      color: #fff; padding: 28px 32px;
+    }
+    .hd h1 { font-size: 22px; }
+    .hd p { font-size: 13px; opacity: .9; margin-top: 4px; }
+    main { max-width: 860px; margin: 0 auto; padding: 28px 24px 60px; }
+    h2 {
+      font-size: 17px; margin: 28px 0 10px; padding-left: 10px;
+      border-left: 4px solid #4f46e5;
+    }
+    h3 { font-size: 14px; margin: 16px 0 6px; color: #374151; }
+    p, li { font-size: 13.5px; color: #4b5563; }
+    ul { padding-left: 20px; margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; background: #fff; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 12px; font-size: 13px; text-align: left; }
+    th { background: #eef2ff; color: #3730a3; }
+    .note {
+      background: #fefce8; border: 1px solid #fde047; border-radius: 10px;
+      padding: 10px 14px; font-size: 13px; color: #854d0e; margin: 10px 0;
+    }
+    .kbd {
+      background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 6px;
+      padding: 1px 7px; font-size: 12px; color: #4338ca; white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <header class="hd">
+    <h1>🔖 书签管家 · 功能说明</h1>
+    <p>书签有效性检测 · 搜索 · 分组 · 排序 · 批量导入导出</p>
+  </header>
+
+  <main>
+    <h2>一、工具栏弹窗（点击浏览器工具栏图标）</h2>
+    <h3>1. 搜索与范围选择</h3>
+    <ul>
+      <li>搜索框支持实时过滤，输入即出结果。</li>
+      <li>搜索框下方的三个<span class="kbd">胶囊按钮</span>（标题 / 网址 / 分组）<b>可以点击</b>：勾选或取消，决定搜索匹配的范围——标题匹配书签名、网址匹配 URL、分组匹配文件夹名（命中分组时该分组下全部书签整组显示）。</li>
+      <li>结果按文件夹分组展示，分组头显示数量，<b>默认折叠</b>，点击分组头展开/收起；搜索时自动全部展开。</li>
+    </ul>
+    <h3>2. 收藏当前页</h3>
+    <ul>
+      <li>点击<span class="kbd">收藏当前页</span>，面板中会预填当前页签的标题，<b>可在收藏前修改标题</b>。</li>
+      <li>在「搜索分组」框中按分组名筛选目标分组（列表显示完整层级路径），点击分组即完成收藏。</li>
+    </ul>
+    <h3>3. 导入 / 导出</h3>
+    <ul>
+      <li><span class="kbd">导入</span>：选择 Netscape 标准书签 HTML 文件，批量导入到按日期命名的新分组，不污染既有书签。</li>
+      <li><span class="kbd">导出</span>：一键导出当前全部书签（标准 Netscape 格式，可与其他浏览器互导）。<b>选择性导出请在管理页使用</b>。</li>
+    </ul>
+    <h3>4. 检测有效性</h3>
+    <ul>
+      <li>对全部 http(s) 书签发起网络可达性探测，完成后不可达的书签标记红色徽标。</li>
+      <li>更精细的检测与重检请使用管理页。</li>
+    </ul>
+
+    <h2>二、管理页（弹窗 → 打开管理页）</h2>
+    <h3>1. 分组与排序</h3>
+    <ul>
+      <li>勾选<span class="kbd">按文件夹分组</span>时按书签栏实际目录折叠展示，每组标题显示可见书签数量，组内可「打开全部」。</li>
+      <li>排序方式：添加时间（新→旧 / 旧→新）、网址 A→Z、标题 A→Z。</li>
+    </ul>
+    <h3>2. 有效性检测与不可达清单</h3>
+    <ul>
+      <li>点击<span class="kbd">检测有效性</span>对全部书签检测，结果实时显示（可达 / 不可达 / 检测中）。</li>
+      <li>不可达清单中每项有<b>勾选框</b>，支持「全选」；点击<span class="kbd">重新检测</span>时——勾选了若干项则只重检勾选项，一个不勾则重检全部不可达。</li>
+      <li>清单中每项可单独「打开」验证或「删除」清理。</li>
+    </ul>
+    <h3>3. 选择性导出（指定分组 / 指定书签）</h3>
+    <ul>
+      <li>点击<span class="kbd">导出</span>弹出导出面板，两种模式：
+        <ul>
+          <li><b>全部书签</b>：一键导出全部。</li>
+          <li><b>自定义选择</b>：在目录树中勾选——勾选<b>分组</b>导出该分组整棵子树；只勾选分组内的<b>部分书签</b>则仅导出勾选的书签（保留其所在层级）。可任意组合。</li>
+        </ul>
+      </li>
+      <li>导出为 Netscape 标准格式 HTML，可直接导入 Chrome 原生书签管理器或其他浏览器。</li>
+    </ul>
+    <h3>4. 编辑与删除</h3>
+    <ul>
+      <li>每条书签支持「打开 / 编辑（标题与网址）/ 删除」。</li>
+    </ul>
+
+    <h2>三、检测原理与局限（重要）</h2>
+    <p>扩展采用<b>三重探测</b>以降低误报，任一成功即判定可达：</p>
+    <table>
+      <tr><th>顺序</th><th>策略</th><th>说明</th></tr>
+      <tr><td>1</td><td>no-cors GET</td><td>标准 fetch 探测，10 秒超时</td></tr>
+      <tr><td>2</td><td>favicon 图片探测</td><td>用图片加载器加载站点 favicon，绕过 fetch 栈限制</td></tr>
+      <tr><td>3</td><td>GET 重试</td><td>排除瞬时网络抖动</td></tr>
+    </table>
+    <div class="note">
+      受浏览器安全策略（CORS）限制，检测只能判断「网络层是否可达」（DNS 失败、超时、离线），<b>无法准确识别 HTTP 404/500</b>；无 favicon 且严格拦截探测的站点仍可能被误判为不可达。检测结果应作为「疑似失效」参考。
+    </div>
+
+    <h2>四、常见问题</h2>
+    <h3>Q：检测前弹出的提示是什么？</h3>
+    <p>是网络环境提醒：请在稳定网络下检测，且明确告知检测的局限（见上节）。</p>
+    <h3>Q：导入的书签去了哪里？</h3>
+    <p>整体落在书签栏下「导入书签-日期时间」新分组中，确认无误后可自行整理或删除该分组。</p>
+    <h3>Q：首次打开弹窗时的黄色提示？</h3>
+    <p>首次使用引导，提醒范围胶囊可点击。点击「知道了」或任意胶囊后不再显示。</p>
+  </main>
+</body>
+</html>
