@@ -25,7 +25,12 @@
   </header>
 
   <div class="toolbar">
-    <input id="q" type="search" class="search" placeholder="搜索书签标题或网址…" />
+    <input id="q" type="search" class="search" placeholder="搜索 标题 / 网址 / 分组…" />
+    <div class="scopes" id="scopes" title="勾选/取消决定搜索范围">
+      <label class="chip"><input type="checkbox" id="scTitle" checked /><span>标题</span></label>
+      <label class="chip"><input type="checkbox" id="scUrl" checked /><span>网址</span></label>
+      <label class="chip"><input type="checkbox" id="scGrp" checked /><span>分组</span></label>
+    </div>
     <select id="sort" class="select" title="排序方式">
       <option value="date_desc">添加时间（新→旧）</option>
       <option value="date_asc">添加时间（旧→新）</option>
@@ -38,6 +43,14 @@
   </div>
 
   <div id="progress" class="progress hidden"></div>
+
+  <!-- 批量选择栏：勾选主列表书签后出现，可自定义删除 -->
+  <div id="selBar" class="sel-bar hidden">
+    <span id="selCount" class="sel-count"></span>
+    <span class="spacer"></span>
+    <button id="selClear" class="btn small ghost">取消选择</button>
+    <button id="selDelete" class="btn small danger">删除勾选</button>
+  </div>
 
   <!-- 不可达清单 -->
   <section id="badPanel" class="bad-panel hidden">
@@ -79,6 +92,7 @@
         <label><input type="radio" name="expMode" value="custom" /> 自定义选择（勾选分组或分组内的书签）</label>
       </div>
       <div id="expTree" class="exp-tree hidden"></div>
+      <div id="expTip" class="exp-tip hidden">分组默认折叠（避免书签过多）：勾选分组即导出整组；点击展开后可只勾选组内部分书签。</div>
       <div class="modal-actions">
         <button id="exportCancel" class="btn">取消</button>
         <button id="exportDo" class="btn primary">导出</button>

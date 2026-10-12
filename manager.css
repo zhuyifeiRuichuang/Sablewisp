@@ -53,6 +53,27 @@ body {
 }
 .toggle { font-size: 13px; color: #374151; display: flex; align-items: center; gap: 6px; cursor: pointer; }
 
+/* 搜索范围胶囊（标题/网址/分组） */
+.scopes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.chip {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 12px; color: #4b5563; cursor: pointer; user-select: none;
+  padding: 5px 11px; border: 1px solid #e5e7eb; border-radius: 999px; background: #f9fafb;
+  white-space: nowrap;
+}
+.chip:hover { border-color: #c7d2fe; background: #f5f7ff; }
+.chip input { accent-color: #4f46e5; margin: 0; }
+
+/* 批量选择栏：勾选主列表书签后出现 */
+.sel-bar {
+  display: flex; align-items: center; gap: 10px;
+  margin: 14px 22px 0; padding: 10px 16px;
+  background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 12px;
+  font-size: 13px; color: #4338ca;
+}
+.sel-bar .spacer { flex: 1; }
+.sel-count { font-weight: 600; }
+
 .progress {
   padding: 10px 22px; background: #eef2ff; color: #4338ca;
   font-size: 13px; border-bottom: 1px solid #e0e7ff;
@@ -84,6 +105,10 @@ body {
 }
 .export-modes label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .export-modes input { accent-color: #4f46e5; }
+.exp-tip {
+  margin-top: 8px; font-size: 12px; color: #6b7280; line-height: 1.6;
+  background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 9px; padding: 8px 10px;
+}
 .exp-tree {
   max-height: 320px; overflow-y: auto;
   border: 1px solid #e5e7eb; border-radius: 10px;
@@ -167,6 +192,10 @@ details.folder[open] > summary::before { transform: rotate(90deg); }
 }
 .row .acts button:hover { border-color: #c7d2fe; background: #f5f7ff; }
 .row .acts .del:hover { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
+.row .acts .chk:hover { border-color: #fcd34d; background: #fffbeb; color: #a16207; }
+.row .acts button:disabled { opacity: .55; cursor: not-allowed; }
+/* 主列表每行左侧勾选框（用于自定义批量删除） */
+.row-ck { flex: 0 0 auto; width: 15px; height: 15px; accent-color: #4f46e5; cursor: pointer; }
 
 .status { font-size: 11px; padding: 2px 8px; border-radius: 7px; flex: 0 0 auto; }
 .status.ok { background: #dcfce7; color: #15803d; }

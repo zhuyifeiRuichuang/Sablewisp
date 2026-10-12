@@ -3,19 +3,28 @@
 let TREE = [];
 let ROOTS = [];
 let ALL = [];
-let STATUS = {};        // id -> 'ok' | 'bad' | 'checking'
+let STATUS = {};        // id -> 'ok' | 'site_down' | 'local_unreachable' | 'checking'
 let CHECKING = false;
 let query = '';
 let sort = 'date_desc';
 let groupByFolder = true;
+let CHECKED = new Set();   // 主列表中被勾选的书签 id（自定义批量删除）
 
 const $ = (id) => document.getElementById(id);
 const content = $('content');
 
+// 搜索范围：标题 / 网址 / 分组（与弹窗一致，三个胶囊可分别勾选）
 function leafMatch(b) {
   if (!query) return true;
   const q = query.toLowerCase();
-  return (b.title || '').toLowerCase().includes(q) || (b.url || '').toLowerCase().includes(q);
+  const t = $('scTitle').checked;
+  const u = $('scUrl').checked;
+  const g = $('scGrp').checked;
+  if (!t && !u && !g) return false;
+  if (t && (b.title || '').toLowerCase().includes(q)) return true;
+  if (u && (b.url || '').toLowerCase().includes(q)) return true;
+  if (g && (b.parentTitle || '').toLowerCase().includes(q)) return true;
+  return false;
 }
 function folderHasMatch(node) {
   if (!node.children) return false;
@@ -60,6 +69,7 @@ function renderBookmark(b) {
   const dom = domainOf(b.url) || b.url;
   const color = avatarColor(b.title + b.url);
   return `<div class="row" data-id="${b.id}">
+    <input type="checkbox" class="row-ck" data-id="${b.id}" ${CHECKED.has(b.id) ? 'checked' : ''} title="勾选以自定义批量删除" />
     <div class="avatar" style="background:${color}">${escapeHtml(letterOf(b.title))}</div>
     <div class="meta">
       <div class="name" title="${escapeHtml(b.title)}">${escapeHtml(b.title)}</div>
@@ -68,6 +78,7 @@ function renderBookmark(b) {
     ${statusHtml(b.id)}
     <span class="date">${formatDate(b.dateAdded)}</span>
     <div class="acts">
+      <button class="chk" data-id="${b.id}" ${CHECKING ? 'disabled' : ''} title="只检测这一个网址">检测</button>
       <button class="open" data-id="${b.id}" data-url="${escapeHtml(b.url)}">打开</button>
       <button class="edit" data-id="${b.id}">编辑</button>
       <button class="del" data-id="${b.id}">删除</button>
@@ -121,12 +132,18 @@ function render() {
   }
   bindRowEvents();
   renderBadPanel();
+  updateSelBar();
   updateStat();
 }
 
 function bindRowEvents() {
   content.querySelectorAll('.row').forEach((row) => {
     const id = row.getAttribute('data-id');
+    row.querySelector('.row-ck').addEventListener('change', (e) => {
+      if (e.target.checked) CHECKED.add(id); else CHECKED.delete(id);
+      updateSelBar();
+    });
+    row.querySelector('.chk').addEventListener('click', (e) => { e.stopPropagation(); singleCheck(id); });
     row.querySelector('.open').addEventListener('click', (e) => {
       e.stopPropagation();
       chrome.tabs.create({ url: row.querySelector('.open').getAttribute('data-url') });
@@ -180,6 +197,61 @@ function removeFolder(folderId) {
   const n = countBookmarks(node);
   if (!confirm(`确定删除分组「${name}」？\n\n该分组内的 ${n} 个书签（含子分组）将一并删除，此操作不可恢复。`)) return;
   chrome.bookmarks.removeTree(folderId, () => { reload(); });
+}
+
+/* ---------- 主列表勾选：自定义批量删除 ---------- */
+function updateSelBar() {
+  const bar = $('selBar');
+  if (!bar) return;
+  if (CHECKED.size === 0) { bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  $('selCount').textContent = `已勾选 ${CHECKED.size} 个书签`;
+}
+
+function clearChecked() {
+  CHECKED.clear();
+  content.querySelectorAll('.row-ck').forEach((ck) => { ck.checked = false; });
+  updateSelBar();
+}
+
+function deleteCheckedRows() {
+  const ids = Array.from(CHECKED);
+  if (ids.length === 0) { alert('请先勾选要删除的书签'); return; }
+  if (!confirm(`确定删除勾选的 ${ids.length} 个书签？此操作不可恢复。`)) return;
+  let done = 0;
+  ids.forEach((id) => {
+    chrome.bookmarks.remove(id, () => {
+      delete STATUS[id];
+      if (++done === ids.length) { CHECKED.clear(); reload(); }
+    });
+  });
+}
+
+/* ---------- 单个书签有效性检测（针对指定网址） ---------- */
+async function singleCheck(id) {
+  if (CHECKING) { alert('正在执行批量检测，请稍候再试'); return; }
+  const b = ALL.find((x) => x.id === id);
+  if (!b) return;
+  if (!/^https?:/i.test(b.url)) { alert('仅支持检测 http(s) 网址'); return; }
+  CHECKING = true;
+  const btn = content.querySelector(`.row[data-id="${id}"] .chk`);
+  if (btn) btn.disabled = true;
+  STATUS[id] = 'checking';
+  render();
+  const r = await probe(b.url);
+  STATUS[id] = r;
+  await syncSingleCheck(b, r);
+  CHECKING = false;
+  render();
+}
+
+// 把单个检测结果合并进 lastCheck：可达则移除记录，不可达则新增/更新记录
+async function syncSingleCheck(b, r) {
+  const s = await getSettings();
+  const last = s.lastCheck || { time: Date.now(), total: ALL.filter((x) => /^https?:/i.test(x.url)).length, bad: [] };
+  const bad = (last.bad || []).filter((x) => x.id !== b.id);
+  if (r !== 'ok') bad.push({ id: b.id, title: b.title, url: b.url, status: r });
+  await setSettings({ lastCheck: { time: Date.now(), total: last.total || ALL.length, bad } });
 }
 
 /* ---------- 编辑弹窗 ---------- */
@@ -379,6 +451,9 @@ function reload() {
     const list = [];
     flattenTree(tree, '', list);
     ALL = list;
+    // 清理已不存在于书签中的勾选项
+    const ids = new Set(ALL.map((b) => b.id));
+    CHECKED = new Set(Array.from(CHECKED).filter((id) => ids.has(id)));
     render();
   });
 }
@@ -406,6 +481,13 @@ function init() {
     setSettings({ groupByFolder: groupByFolder });
     render();
   });
+  // 搜索范围：标题 / 网址 / 分组（与弹窗一致）
+  ['scTitle', 'scUrl', 'scGrp'].forEach((id) => {
+    $(id).addEventListener('change', () => render());
+  });
+  // 主列表勾选批量删除
+  $('selDelete').addEventListener('click', deleteCheckedRows);
+  $('selClear').addEventListener('click', clearChecked);
 
   $('refresh').addEventListener('click', reload);
   $('help').addEventListener('click', () => {
@@ -417,7 +499,9 @@ function init() {
   $('exportModal').addEventListener('click', (e) => { if (e.target === $('exportModal')) closeExport(); });
   document.querySelectorAll('input[name="expMode"]').forEach((r) => {
     r.addEventListener('change', () => {
-      $('expTree').classList.toggle('hidden', r.value !== 'custom' || !r.checked);
+      const show = r.value === 'custom' && r.checked;
+      $('expTree').classList.toggle('hidden', !show);
+      $('expTip').classList.toggle('hidden', !show);
     });
   });
   $('import').addEventListener('click', () => {

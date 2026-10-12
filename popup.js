@@ -224,6 +224,7 @@ function openExportPanel() {
     bindExportChecks($('pexpTree'));
     document.querySelector('input[name="pexpMode"][value="all"]').checked = true;
     $('pexpTree').classList.add('hidden');
+    $('pexpTip').classList.add('hidden');
     $('exportPanel').classList.remove('hidden');
   });
 }
@@ -293,7 +294,9 @@ function init() {
   $('exportPanel').addEventListener('click', (e) => { if (e.target === $('exportPanel')) $('exportPanel').classList.add('hidden'); });
   document.querySelectorAll('input[name="pexpMode"]').forEach((r) => {
     r.addEventListener('change', () => {
-      $('pexpTree').classList.toggle('hidden', r.value !== 'custom' || !r.checked);
+      const show = r.value === 'custom' && r.checked;
+      $('pexpTree').classList.toggle('hidden', !show);
+      $('pexpTip').classList.toggle('hidden', !show);
     });
   });
   $('collect').addEventListener('click', openCollect);

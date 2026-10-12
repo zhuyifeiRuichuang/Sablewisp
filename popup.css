@@ -254,6 +254,11 @@ body {
   font-size: 13px;
   margin-bottom: 4px;
 }
+.exp-tip {
+  font-size: 11px; color: #6b7280; line-height: 1.6;
+  background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 9px;
+  padding: 7px 9px; margin-bottom: 4px;
+}
 .exp-folder { margin: 2px 0; }
 .exp-folder > summary {
   display: flex; align-items: center; gap: 6px;

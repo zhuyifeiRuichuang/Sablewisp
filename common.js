@@ -208,7 +208,7 @@ function renderExportTreeHtml(roots) {
     const bm = node.children.filter((c) => c.url);
     const folders = node.children.filter((c) => !c.url);
     const inner = folders.map(renderNode).join('') + bm.map(renderNode).join('');
-    return `<details class="exp-folder" open>
+    return `<details class="exp-folder">
       <summary>
         <input type="checkbox" class="exp-ck exp-folder-ck" data-id="${node.id}" />
         📁 ${escapeHtml(node.title || '未命名')}
