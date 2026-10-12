@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
   "name": "书签管家 - 书签有效性检测与分组管理",
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "minimum_chrome_version": "109",
   "description": "检测书签有效性并列出不可达网页，支持搜索、分组、按添加时间/网址排序，以及批量导入导出、编辑与删除。",
   "icons": {
     "16": "icon16.png",
@@ -24,6 +25,9 @@
     "bookmarks",
     "storage",
     "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src *;"
