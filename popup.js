@@ -104,7 +104,7 @@ async function checkValidity() {
   CHECKING = true;
   const targets = ALL.filter((b) => /^https?:/i.test(b.url));
   if (targets.length === 0) { CHECKING = false; return; }
-  if (!confirm('即将对 ' + targets.length + ' 个网页发起有效性检测。\n\n检测策略（规避本地网络误判）：\n• 优先本地快速探测：本地能打开即判定「可达」；\n• 本地打不开时，自动改用在线多节点检测工具（check-host.net）验证全球可达性；\n• 全球均不可达 → 标记「网站故障」；仅本地不可达、全球正常 → 标记「本地访问不可达」；\n• 在线服务偶发不可用时，保守标记为「本地访问不可达」。\n\n说明：在线检测由后台 Service Worker 发起，可能比纯本地检测稍慢，请耐心等待。')) {
+  if (!confirm('即将对 ' + targets.length + ' 个网页发起有效性检测。\n\n检测策略（规避本地网络误判）：\n• 本地四重探测：收到任何 HTTP 响应（含 Cloudflare 403 人机验证、429 限流）即判定「可达」，防护站不误判；\n• 本地打不开时，自动改用在线多节点检测工具（check-host.net）验证全球可达性。\n\n说明：详细结果请在管理页查看，本页仅显示完成提示。')) {
     CHECKING = false; return;
   }
   const bad = [];

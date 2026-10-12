@@ -383,7 +383,7 @@ async function checkValidity() {
   if (CHECKING) return;
   const targets = ALL.filter((b) => /^https?:/i.test(b.url));
   if (targets.length === 0) return;
-  if (!confirm('即将对 ' + targets.length + ' 个网页发起有效性检测。\n\n检测策略（规避本地网络误判）：\n• 优先本地快速探测：本地能打开即判定「可达」；\n• 本地打不开时，自动改用在线多节点检测工具（check-host.net）验证全球可达性；\n• 全球均不可达 → 标记「网站故障」；仅本地不可达、全球正常 → 标记「本地访问不可达」；\n• 在线服务偶发不可用时，保守标记为「本地访问不可达」。\n\n说明：在线检测由后台 Service Worker 发起，可能比纯本地检测稍慢，请耐心等待。')) {
+  if (!confirm('即将对 ' + targets.length + ' 个网页发起有效性检测。\n\n检测策略（规避本地网络误判）：\n• 本地四重探测：收到任何 HTTP 响应（含 Cloudflare 403 人机验证、429 限流）即判定「可达」，防护站不误判；\n• 本地打不开时，自动改用在线多节点检测工具（check-host.net）验证全球可达性；\n• 全球均不可达 → 标记「网站故障」；仅本地不可达、全球正常 → 标记「本地访问不可达」；\n• 在线服务偶发不可用时，保守标记为「本地访问不可达」。\n\n说明：在线检测由后台 Service Worker 发起，可能比纯本地检测稍慢，请耐心等待。')) {
     return;
   }
   CHECKING = true;
@@ -489,9 +489,19 @@ function init() {
   $('selDelete').addEventListener('click', deleteCheckedRows);
   $('selClear').addEventListener('click', clearChecked);
 
-  $('refresh').addEventListener('click', reload);
   $('help').addEventListener('click', () => {
     chrome.tabs.create({ url: chrome.runtime.getURL('help.html') });
+  });
+  // 右下角快速导航
+  $('toTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  $('toBottom').addEventListener('click', () => {
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+  });
+  // 书签变更自动同步（替代原「刷新」按钮：增删改书签后无需手动刷新）
+  let reloadTimer = null;
+  const scheduleReload = () => { clearTimeout(reloadTimer); reloadTimer = setTimeout(reload, 300); };
+  ['onCreated', 'onRemoved', 'onChanged', 'onMoved'].forEach((evt) => {
+    if (chrome.bookmarks[evt]) chrome.bookmarks[evt].addListener(scheduleReload);
   });
   $('export').addEventListener('click', openExport);
   $('exportCancel').addEventListener('click', closeExport);

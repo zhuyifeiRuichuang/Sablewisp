@@ -64,15 +64,30 @@ body {
 .chip:hover { border-color: #c7d2fe; background: #f5f7ff; }
 .chip input { accent-color: #4f46e5; margin: 0; }
 
-/* 批量选择栏：勾选主列表书签后出现 */
+/* 批量选择栏：吸顶悬浮（长列表勾选后滚动到任意位置都可操作） */
 .sel-bar {
+  position: sticky; top: 8px; z-index: 40;
   display: flex; align-items: center; gap: 10px;
   margin: 14px 22px 0; padding: 10px 16px;
   background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 12px;
   font-size: 13px; color: #4338ca;
+  box-shadow: 0 8px 24px rgba(79, 70, 229, .18);
 }
 .sel-bar .spacer { flex: 1; }
 .sel-count { font-weight: 600; }
+
+/* 右下角快速导航：回到顶部 / 跳到底部 */
+.float-nav {
+  position: fixed; right: 22px; bottom: 22px; z-index: 60;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.float-nav button {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid #c7d2fe; background: #fff; color: #4338ca;
+  font-size: 16px; line-height: 1; cursor: pointer;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .16);
+}
+.float-nav button:hover { background: #eef2ff; }
 
 .progress {
   padding: 10px 22px; background: #eef2ff; color: #4338ca;

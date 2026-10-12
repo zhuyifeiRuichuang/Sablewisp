@@ -65,22 +65,28 @@ function loadBookmarks() {
   });
 }
 
-// 网络层可达性探测（多策略，降低误报）：
-// 1) no-cors GET：只能判断网络层是否可达，无法识别 HTTP 404/500；
-// 2) favicon 图片探测：某些站点/代理环境下 fetch 栈异常，用 <img> 加载器绕过；
-// 3) GET 重试一次：排除瞬时网络抖动。
-// 任一策略成功即判定可达。
-function fetchProbe(url, timeout) {
+// 本地可达性探测（多策略，尽量反映真实访问体验）：
+// 扩展已声明 host_permissions: ["<all_urls>"]，扩展页 fetch 不受 CORS 限制，
+// 可用默认模式发起请求（无需 no-cors），服务器返回的任何 HTTP 响应都视为「本地可达」。
+// 关键判定：Cloudflare 等防护站点返回的 403 人机验证、429 限流、503 等响应，
+// 同样证明站点在本地网络层可达（真实浏览器打开后通过验证即可正常访问），
+// 不应误判为「本地访问不可达」。
+function statusProbe(url, timeout) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   return fetch(url, {
     method: 'GET',
-    mode: 'no-cors',
     cache: 'no-store',
+    credentials: 'omit',       // 不带站点 Cookie，模拟首次访客
     redirect: 'follow',
     signal: ctrl.signal
   })
-    .then(() => { clearTimeout(timer); return 'ok'; })
+    .then((res) => {
+      clearTimeout(timer);
+      // 不读取 body，尽早释放连接
+      if (res && res.body && res.body.cancel) { try { res.body.cancel(); } catch (e) { /* 忽略 */ } }
+      return 'ok';             // 收到任何 HTTP 状态码 → 服务器有响应 → 可达
+    })
     .catch(() => { clearTimeout(timer); return 'bad'; });
 }
 
@@ -102,13 +108,18 @@ function imgProbe(url, timeout) {
   });
 }
 
-// 本地三重探测（仅判断本地网络层是否可达；本地可达即视为可达，不触发在线检测）
-async function localProbe(url, timeout = 8000) {
-  if (await fetchProbe(url, timeout) === 'ok') return 'ok';
+// 本地四重探测（任一成功即判定本地可达）：
+// 1) GET 可读状态探测（10s）：任何 HTTP 响应（含 CF 403/429/503 防护页）均算可达；
+// 2) favicon.ico 可读状态探测（8s）：favicon 404 也说明域名解析且服务器有响应；
+// 3) favicon 图片探测（8s）：绕过 fetch 栈限制的兜底；
+// 4) GET 重试（14s 长超时）：排除 Cloudflare 首次握手/挑战处理偏慢与瞬时网络抖动。
+async function localProbe(url) {
+  if (await statusProbe(url, 10000) === 'ok') return 'ok';
   let origin;
   try { origin = new URL(url).origin; } catch (e) { return 'bad'; }
-  if (await imgProbe(origin + '/favicon.ico', timeout) === 'ok') return 'ok';
-  return fetchProbe(url, timeout);
+  if (await statusProbe(origin + '/favicon.ico', 8000) === 'ok') return 'ok';
+  if (await imgProbe(origin + '/favicon.ico', 8000) === 'ok') return 'ok';
+  return statusProbe(url, 14000);
 }
 
 // 混合探测：优先本地快速探测；本地不可达时再走在线多节点检测（check-host.net），
