@@ -146,7 +146,7 @@ function bindRowEvents() {
     row.querySelector('.chk').addEventListener('click', (e) => { e.stopPropagation(); singleCheck(id); });
     row.querySelector('.open').addEventListener('click', (e) => {
       e.stopPropagation();
-      chrome.tabs.create({ url: row.querySelector('.open').getAttribute('data-url') });
+      openUrl(row.querySelector('.open').getAttribute('data-url'));
     });
     row.querySelector('.edit').addEventListener('click', (e) => { e.stopPropagation(); openEdit(id); });
     row.querySelector('.del').addEventListener('click', (e) => { e.stopPropagation(); removeBookmark(id); });
@@ -173,7 +173,14 @@ function openAllInFolder(folderId) {
     if (!n.children) return;
     n.children.forEach((c) => { if (c.url) urls.push(c.url); else collect(c); });
   })(node);
-  urls.forEach((u) => chrome.tabs.create({ url: u }));
+  const openable = urls.filter(isOpenableUrl);
+  if (openable.length === 0) { alert('该分组内没有可直接打开的网页地址'); return; }
+  // 资源保护：一次性打开大量标签页可能拖垮浏览器，超过 10 个需确认
+  if (openable.length > 10 &&
+      !confirm(`该分组共 ${openable.length} 个书签，确定一次性全部打开？\n将新建 ${openable.length} 个标签页，可能占用较多内存。`)) {
+    return;
+  }
+  openable.forEach((u) => chrome.tabs.create({ url: u }));
 }
 
 function findNode(list, id) {
@@ -305,7 +312,7 @@ function renderBadPanel() {
       <button class="btn ghost small" data-del="${b.id}">删除</button>
     </li>`).join('');
   $('badList').querySelectorAll('[data-open]').forEach((el) =>
-    el.addEventListener('click', () => chrome.tabs.create({ url: el.getAttribute('data-open') })));
+    el.addEventListener('click', () => openUrl(el.getAttribute('data-open'))));
   $('badList').querySelectorAll('[data-del]').forEach((el) =>
     el.addEventListener('click', () => { chrome.bookmarks.remove(el.getAttribute('data-del'), () => reload()); }));
 }

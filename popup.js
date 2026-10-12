@@ -94,7 +94,7 @@ function render() {
 function bindItemClick() {
   listEl.querySelectorAll('.item').forEach((el) => {
     el.addEventListener('click', () => {
-      chrome.tabs.create({ url: el.getAttribute('data-url') });
+      openUrl(el.getAttribute('data-url'));   // 带协议校验，避免导航到不可打开的非常规地址
     });
   });
 }

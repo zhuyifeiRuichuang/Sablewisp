@@ -11,6 +11,21 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
+// 可直接在标签页打开的地址协议（http/https、本地文件、浏览器与扩展内页）。
+// Chrome 已禁用顶层导航到 javascript:/data: 等协议，扩展调用 chrome.tabs.create
+// 会被静默忽略；这里提前校验并给出明确提示，避免无反馈与非常规地址导航风险。
+function isOpenableUrl(url) {
+  return /^(https?|file|ftp|chrome|chrome-extension|view-source):/i.test(url || '');
+}
+
+function openUrl(url) {
+  if (!isOpenableUrl(url)) {
+    alert('浏览器不允许直接打开该类型地址：\n' + String(url).slice(0, 200));
+    return;
+  }
+  chrome.tabs.create({ url });
+}
+
 function domainOf(url) {
   try {
     return new URL(url).hostname.replace(/^www\./, '');

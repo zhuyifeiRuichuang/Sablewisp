@@ -101,6 +101,8 @@ async function onlineCheck(url) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // 仅接受本扩展内部（popup / 管理页）发起的消息，阻断其它扩展或页面的调用
+  if (!sender || sender.id !== chrome.runtime.id) return false;
   if (msg && msg.type === 'PING') {
     sendResponse({ pong: true });
     return false;
