@@ -190,11 +190,14 @@ function saveToFolder(folderId, folderName) {
   });
 }
 
+// Chrome 原生可收藏的地址协议（书签可正常保存与打开）
+const BOOKMARKABLE_RE = /^(https?|file|ftp|chrome|chrome-extension|view-source):/i;
+
 function openCollect() {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const t = tabs && tabs[0];
-    if (!t || !/^https?:/i.test(t.url || '')) {
-      alert('当前页签不是可收藏的 http(s) 网页');
+    if (!t || !BOOKMARKABLE_RE.test(t.url || '') || /^about:blank/i.test(t.url || '')) {
+      alert('当前页签没有可收藏的地址（空白页或浏览器内部页不可收藏）');
       return;
     }
     COLLECT_TAB = { title: t.title, url: t.url };
