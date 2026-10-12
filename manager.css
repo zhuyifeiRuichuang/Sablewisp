@@ -245,5 +245,8 @@ details.folder[open] > summary::before { transform: rotate(90deg); }
 }
 .modal-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+/* 弹窗内按钮：.btn 基础样式为深色头部设计（白字半透明白底），在白色弹窗中不可见，需覆盖 */
+.modal-actions .btn { background: #fff; color: #374151; border-color: #e5e7eb; }
+.modal-actions .btn:hover { background: #f5f7ff; border-color: #c7d2fe; }
 
 .hidden { display: none !important; }
