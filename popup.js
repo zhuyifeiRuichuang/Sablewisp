@@ -127,6 +127,15 @@ async function checkValidity() {
   renderStat();
   render();
   CHECKING = false;
+
+  // 检测完成后引导去管理页查看详细结果
+  if (bad.length > 0) {
+    if (confirm(`检测完成：${targets.length} 个书签中发现 ${bad.length} 个不可达。\n\n详细结果（「网站故障 / 本地访问不可达」分类标记、勾选重检、批量删除）请在管理页查看。\n\n是否立即打开管理页？`)) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('manager.html') });
+    }
+  } else {
+    alert(`检测完成：${targets.length} 个书签全部可达。`);
+  }
 }
 
 /* ---------- 收藏当前页到指定分组 ---------- */

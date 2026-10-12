@@ -54,32 +54,24 @@ body {
 
 .scopes {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   padding: 8px 2px 2px;
+  flex-wrap: wrap;
 }
-.scopes .chip { position: relative; cursor: pointer; user-select: none; }
-.scopes .chip input { position: absolute; opacity: 0; pointer-events: none; }
-.scopes .chip span {
-  display: inline-block;
-  padding: 3px 14px;
-  border-radius: 999px;           /* 胶囊形，无尖角 */
+/* 范围胶囊：与管理页同款（可见勾选框 + 文字） */
+.scopes .chip {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 12px; color: #4b5563; cursor: pointer; user-select: none;
+  padding: 5px 11px;
   border: 1px solid #e5e7eb;
-  background: #fff;
-  color: #6b7280;
-  font-size: 12px;
-  line-height: 1.5;
+  border-radius: 999px;
+  background: #f9fafb;
   white-space: nowrap;            /* 禁止换行导致的拥挤 */
-  transition: background .15s, border-color .15s, color .15s;
+  transition: background .15s, border-color .15s;
 }
-.scopes .chip input:checked + span {
-  background: #4f46e5;
-  border-color: #4f46e5;
-  color: #fff;
-  font-weight: 600;
-}
-.scopes .chip:hover span { border-color: #a5b4fc; }
-.scopes .chip input:checked + span:hover { background: #4338ca; }
-.scopes.pulse .chip span { animation: chip-pulse 1.6s ease-in-out infinite; }
+.scopes .chip:hover { border-color: #c7d2fe; background: #f5f7ff; }
+.scopes .chip input { accent-color: #4f46e5; margin: 0; cursor: pointer; }
+.scopes.pulse .chip { animation: chip-pulse 1.6s ease-in-out infinite; }
 @keyframes chip-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.45); }
   50% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0); }
