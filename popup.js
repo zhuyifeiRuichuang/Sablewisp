@@ -15,12 +15,17 @@ function renderStat() {
   statEl.textContent = `共 ${ALL.length} 个书签` + (bad ? ` · 上次检测不可达 ${bad}` : '');
 }
 
+function badBadge(id) {
+  const s = BAD_MAP[id];
+  if (s === 'site_down') return '<span class="badge fault">网站故障</span>';
+  if (s === 'local_unreachable') return '<span class="badge local">本地不可达</span>';
+  return '<span class="badge bad">不可达</span>';
+}
+
 function itemHtml(b) {
   const dom = domainOf(b.url);
   const color = avatarColor(b.title + b.url);
-  const badge = BAD_MAP[b.id]
-    ? '<span class="badge bad">不可达</span>'
-    : '';
+  const badge = BAD_MAP[b.id] ? badBadge(b.id) : '';
   return `<li class="item" data-url="${escapeHtml(b.url)}">
     <div class="avatar" style="background:${color}">${escapeHtml(letterOf(b.title))}</div>
     <div class="meta">
@@ -89,7 +94,7 @@ function render() {
 function bindItemClick() {
   listEl.querySelectorAll('.item').forEach((el) => {
     el.addEventListener('click', () => {
-      chrome.tabs.create({ url: el.getAttribute('data-url') });
+      openUrl(el.getAttribute('data-url'));   // 带协议校验，避免导航到不可打开的非常规地址
     });
   });
 }
@@ -99,7 +104,7 @@ async function checkValidity() {
   CHECKING = true;
   const targets = ALL.filter((b) => /^https?:/i.test(b.url));
   if (targets.length === 0) { CHECKING = false; return; }
-  if (!confirm('即将对 ' + targets.length + ' 个网页发起网络探测。\n\n注意：采用三重探测（GET → favicon → GET 重试）降低误报；受浏览器安全策略(CORS)限制，仅能判断「网络层是否可达」，无法准确识别 HTTP 404/500。请在稳定网络环境下检测。')) {
+  if (!confirm('即将对 ' + targets.length + ' 个网页发起有效性检测。\n\n检测策略（规避本地网络误判）：\n• 本地四重探测：收到任何 HTTP 响应（含 Cloudflare 403 人机验证、429 限流）即判定「可达」，防护站不误判；\n• 本地打不开时，自动改用在线多节点检测工具（check-host.net）验证全球可达性。\n\n说明：详细结果请在管理页查看，本页仅显示完成提示。')) {
     CHECKING = false; return;
   }
   const bad = [];
@@ -111,19 +116,26 @@ async function checkValidity() {
       statEl.textContent = `检测中 ${i + 1}/${targets.length}…`;
       const b = targets[i];
       const r = await probe(b.url);
-      if (r === 'bad') bad.push({ id: b.id, title: b.title, url: b.url });
+      if (r !== 'ok') { BAD_MAP[b.id] = r; bad.push({ id: b.id, title: b.title, url: b.url, status: r }); }
     }
   }
   const pool = [];
   for (let i = 0; i < Math.min(CONC, targets.length); i++) pool.push(worker());
   await Promise.all(pool);
 
-  BAD_MAP = {};
-  bad.forEach((b) => { BAD_MAP[b.id] = true; });
   await setSettings({ lastCheck: { time: Date.now(), total: targets.length, bad } });
   renderStat();
   render();
   CHECKING = false;
+
+  // 检测完成后引导去管理页查看详细结果
+  if (bad.length > 0) {
+    if (confirm(`检测完成：${targets.length} 个书签中发现 ${bad.length} 个不可达。\n\n详细结果（「网站故障 / 本地访问不可达」分类标记、勾选重检、批量删除）请在管理页查看。\n\n是否立即打开管理页？`)) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('manager.html') });
+    }
+  } else {
+    alert(`检测完成：${targets.length} 个书签全部可达。`);
+  }
 }
 
 /* ---------- 收藏当前页到指定分组 ---------- */
@@ -178,11 +190,14 @@ function saveToFolder(folderId, folderName) {
   });
 }
 
+// Chrome 原生可收藏的地址协议（书签可正常保存与打开）
+const BOOKMARKABLE_RE = /^(https?|file|ftp|chrome|chrome-extension|view-source):/i;
+
 function openCollect() {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const t = tabs && tabs[0];
-    if (!t || !/^https?:/i.test(t.url || '')) {
-      alert('当前页签不是可收藏的 http(s) 网页');
+    if (!t || !BOOKMARKABLE_RE.test(t.url || '') || /^about:blank/i.test(t.url || '')) {
+      alert('当前页签没有可收藏的地址（空白页或浏览器内部页不可收藏）');
       return;
     }
     COLLECT_TAB = { title: t.title, url: t.url };
@@ -201,6 +216,41 @@ function openCollect() {
 function closeCollect() {
   $('collectPanel').classList.add('hidden');
   COLLECT_TAB = null;
+}
+
+/* ---------- 导出面板：与管理页一致的选项（全部 / 自定义勾选） ---------- */
+let ROOTS = [];   // 书签树顶层（书签栏/其他书签的 children）
+
+function loadRoots() {
+  return new Promise((resolve) => {
+    chrome.bookmarks.getTree((tree) => {
+      ROOTS = (tree[0] && tree[0].children) || [];
+      resolve(ROOTS);
+    });
+  });
+}
+
+function openExportPanel() {
+  loadRoots().then((roots) => {
+    $('pexpTree').innerHTML = renderExportTreeHtml(roots);
+    bindExportChecks($('pexpTree'));
+    document.querySelector('input[name="pexpMode"][value="all"]').checked = true;
+    $('pexpTree').classList.add('hidden');
+    $('pexpTip').classList.add('hidden');
+    $('exportPanel').classList.remove('hidden');
+  });
+}
+
+function doPopupExport() {
+  const mode = document.querySelector('input[name="pexpMode"]:checked').value;
+  if (mode === 'all') {
+    exportHtml(ALL);
+  } else {
+    const checked = new Set(Array.from($('pexpTree').querySelectorAll('.exp-ck:checked'))
+      .map((el) => el.getAttribute('data-id')));
+    if (!exportFromChecked(ROOTS, checked)) return;
+  }
+  $('exportPanel').classList.add('hidden');
 }
 
 /* ---------- 首次使用引导：提示范围胶囊可点击 ---------- */
@@ -223,7 +273,7 @@ function init() {
     ALL = list;
     getSettings().then((s) => {
       if (s.lastCheck && s.lastCheck.bad) {
-        s.lastCheck.bad.forEach((b) => { BAD_MAP[b.id] = true; });
+        s.lastCheck.bad.forEach((b) => { BAD_MAP[b.id] = b.status || 'bad'; });
       }
       renderStat();
       render();
@@ -250,7 +300,17 @@ function init() {
       }
     });
   });
-  $('export').addEventListener('click', () => exportHtml(ALL));
+  $('export').addEventListener('click', openExportPanel);
+  $('pexpCancel').addEventListener('click', () => $('exportPanel').classList.add('hidden'));
+  $('pexpDo').addEventListener('click', doPopupExport);
+  $('exportPanel').addEventListener('click', (e) => { if (e.target === $('exportPanel')) $('exportPanel').classList.add('hidden'); });
+  document.querySelectorAll('input[name="pexpMode"]').forEach((r) => {
+    r.addEventListener('change', () => {
+      const show = r.value === 'custom' && r.checked;
+      $('pexpTree').classList.toggle('hidden', !show);
+      $('pexpTip').classList.toggle('hidden', !show);
+    });
+  });
   $('collect').addEventListener('click', openCollect);
   $('collectCancel').addEventListener('click', closeCollect);
   $('grpSearch').addEventListener('input', renderGrpList);

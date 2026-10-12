@@ -3,27 +3,32 @@
 let TREE = [];
 let ROOTS = [];
 let ALL = [];
-let STATUS = {};        // id -> 'ok' | 'bad' | 'checking'
+let STATUS = {};        // id -> 'ok' | 'site_down' | 'local_unreachable' | 'checking'
 let CHECKING = false;
 let query = '';
 let sort = 'date_desc';
 let groupByFolder = true;
+let CHECKED = new Set();   // 主列表中被勾选的书签 id（自定义批量删除）
 
 const $ = (id) => document.getElementById(id);
 const content = $('content');
 
+// 搜索范围：标题 / 网址 / 分组（与弹窗一致，三个胶囊可分别勾选）
 function leafMatch(b) {
   if (!query) return true;
   const q = query.toLowerCase();
-  return (b.title || '').toLowerCase().includes(q) || (b.url || '').toLowerCase().includes(q);
+  const t = $('scTitle').checked;
+  const u = $('scUrl').checked;
+  const g = $('scGrp').checked;
+  if (!t && !u && !g) return false;
+  if (t && (b.title || '').toLowerCase().includes(q)) return true;
+  if (u && (b.url || '').toLowerCase().includes(q)) return true;
+  if (g && (b.parentTitle || '').toLowerCase().includes(q)) return true;
+  return false;
 }
 function folderHasMatch(node) {
   if (!node.children) return false;
   return node.children.some((c) => (c.url ? leafMatch(c) : folderHasMatch(c)));
-}
-function countBookmarks(node) {
-  if (!node.children) return 0;
-  return node.children.reduce((n, c) => n + (c.url ? 1 : countBookmarks(c)), 0);
 }
 // 仅统计当前搜索条件下可见的书签数量
 function countVisible(node) {
@@ -44,9 +49,17 @@ function sortBookmarks(arr) {
   return a;
 }
 
+// 不可达状态集合：bad（旧）/ site_down（网站故障）/ local_unreachable（本地访问不可达）
+function isBad(id) {
+  const s = STATUS[id];
+  return s === 'bad' || s === 'site_down' || s === 'local_unreachable';
+}
+
 function statusHtml(id) {
   const s = STATUS[id];
   if (s === 'checking') return '<span class="status checking"><span class="dot checking"></span>检测中</span>';
+  if (s === 'site_down') return '<span class="status fault"><span class="dot bad"></span>网站故障</span>';
+  if (s === 'local_unreachable') return '<span class="status local"><span class="dot bad"></span>本地访问不可达</span>';
   if (s === 'bad') return '<span class="status bad">不可达</span>';
   if (s === 'ok') return '<span class="status ok"><span class="dot ok"></span>可达</span>';
   return '';
@@ -56,6 +69,7 @@ function renderBookmark(b) {
   const dom = domainOf(b.url) || b.url;
   const color = avatarColor(b.title + b.url);
   return `<div class="row" data-id="${b.id}">
+    <input type="checkbox" class="row-ck" data-id="${b.id}" ${CHECKED.has(b.id) ? 'checked' : ''} title="勾选以自定义批量删除" />
     <div class="avatar" style="background:${color}">${escapeHtml(letterOf(b.title))}</div>
     <div class="meta">
       <div class="name" title="${escapeHtml(b.title)}">${escapeHtml(b.title)}</div>
@@ -64,6 +78,7 @@ function renderBookmark(b) {
     ${statusHtml(b.id)}
     <span class="date">${formatDate(b.dateAdded)}</span>
     <div class="acts">
+      <button class="chk" data-id="${b.id}" ${CHECKING ? 'disabled' : ''} title="只检测这一个网址">检测</button>
       <button class="open" data-id="${b.id}" data-url="${escapeHtml(b.url)}">打开</button>
       <button class="edit" data-id="${b.id}">编辑</button>
       <button class="del" data-id="${b.id}">删除</button>
@@ -89,11 +104,13 @@ function renderFolderNode(node) {
   if (!inner) return '';
 
   const total = countVisible(node);
+  const isTopRoot = ROOTS.some((r) => r.id === node.id);   // 顶层根（书签栏/其他书签）不可删除
   return `<details class="folder" open>
     <summary>
       📁 ${escapeHtml(node.title || '未命名')}
       <span class="count">(${total})</span>
       <span class="open-all" data-folder="${node.id}">打开全部</span>
+      ${isTopRoot ? '' : `<span class="del-folder" data-folder="${node.id}">删除分组</span>`}
     </summary>
     <div class="children">${inner}</div>
   </details>`;
@@ -115,15 +132,21 @@ function render() {
   }
   bindRowEvents();
   renderBadPanel();
+  updateSelBar();
   updateStat();
 }
 
 function bindRowEvents() {
   content.querySelectorAll('.row').forEach((row) => {
     const id = row.getAttribute('data-id');
+    row.querySelector('.row-ck').addEventListener('change', (e) => {
+      if (e.target.checked) CHECKED.add(id); else CHECKED.delete(id);
+      updateSelBar();
+    });
+    row.querySelector('.chk').addEventListener('click', (e) => { e.stopPropagation(); singleCheck(id); });
     row.querySelector('.open').addEventListener('click', (e) => {
       e.stopPropagation();
-      chrome.tabs.create({ url: row.querySelector('.open').getAttribute('data-url') });
+      openUrl(row.querySelector('.open').getAttribute('data-url'));
     });
     row.querySelector('.edit').addEventListener('click', (e) => { e.stopPropagation(); openEdit(id); });
     row.querySelector('.del').addEventListener('click', (e) => { e.stopPropagation(); removeBookmark(id); });
@@ -132,6 +155,12 @@ function bindRowEvents() {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       openAllInFolder(el.getAttribute('data-folder'));
+    });
+  });
+  content.querySelectorAll('.del-folder').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeFolder(el.getAttribute('data-folder'));
     });
   });
 }
@@ -144,7 +173,14 @@ function openAllInFolder(folderId) {
     if (!n.children) return;
     n.children.forEach((c) => { if (c.url) urls.push(c.url); else collect(c); });
   })(node);
-  urls.forEach((u) => chrome.tabs.create({ url: u }));
+  const openable = urls.filter(isOpenableUrl);
+  if (openable.length === 0) { alert('该分组内没有可直接打开的网页地址'); return; }
+  // 资源保护：一次性打开大量标签页可能拖垮浏览器，超过 10 个需确认
+  if (openable.length > 10 &&
+      !confirm(`该分组共 ${openable.length} 个书签，确定一次性全部打开？\n将新建 ${openable.length} 个标签页，可能占用较多内存。`)) {
+    return;
+  }
+  openable.forEach((u) => chrome.tabs.create({ url: u }));
 }
 
 function findNode(list, id) {
@@ -158,6 +194,71 @@ function findNode(list, id) {
 function removeBookmark(id) {
   if (!confirm('确定删除该书签？')) return;
   chrome.bookmarks.remove(id, () => { reload(); });
+}
+
+// 删除整个分组（文件夹及其全部子级书签/子分组）
+function removeFolder(folderId) {
+  const node = findNode(ROOTS, folderId);
+  if (!node) return;
+  const name = node.title || '未命名';
+  const n = countBookmarks(node);
+  if (!confirm(`确定删除分组「${name}」？\n\n该分组内的 ${n} 个书签（含子分组）将一并删除，此操作不可恢复。`)) return;
+  chrome.bookmarks.removeTree(folderId, () => { reload(); });
+}
+
+/* ---------- 主列表勾选：自定义批量删除 ---------- */
+function updateSelBar() {
+  const bar = $('selBar');
+  if (!bar) return;
+  if (CHECKED.size === 0) { bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  $('selCount').textContent = `已勾选 ${CHECKED.size} 个书签`;
+}
+
+function clearChecked() {
+  CHECKED.clear();
+  content.querySelectorAll('.row-ck').forEach((ck) => { ck.checked = false; });
+  updateSelBar();
+}
+
+function deleteCheckedRows() {
+  const ids = Array.from(CHECKED);
+  if (ids.length === 0) { alert('请先勾选要删除的书签'); return; }
+  if (!confirm(`确定删除勾选的 ${ids.length} 个书签？此操作不可恢复。`)) return;
+  let done = 0;
+  ids.forEach((id) => {
+    chrome.bookmarks.remove(id, () => {
+      delete STATUS[id];
+      if (++done === ids.length) { CHECKED.clear(); reload(); }
+    });
+  });
+}
+
+/* ---------- 单个书签有效性检测（针对指定网址） ---------- */
+async function singleCheck(id) {
+  if (CHECKING) { alert('正在执行批量检测，请稍候再试'); return; }
+  const b = ALL.find((x) => x.id === id);
+  if (!b) return;
+  if (!/^https?:/i.test(b.url)) { alert('仅支持检测 http(s) 网址'); return; }
+  CHECKING = true;
+  const btn = content.querySelector(`.row[data-id="${id}"] .chk`);
+  if (btn) btn.disabled = true;
+  STATUS[id] = 'checking';
+  render();
+  const r = await probe(b.url);
+  STATUS[id] = r;
+  await syncSingleCheck(b, r);
+  CHECKING = false;
+  render();
+}
+
+// 把单个检测结果合并进 lastCheck：可达则移除记录，不可达则新增/更新记录
+async function syncSingleCheck(b, r) {
+  const s = await getSettings();
+  const last = s.lastCheck || { time: Date.now(), total: ALL.filter((x) => /^https?:/i.test(x.url)).length, bad: [] };
+  const bad = (last.bad || []).filter((x) => x.id !== b.id);
+  if (r !== 'ok') bad.push({ id: b.id, title: b.title, url: b.url, status: r });
+  await setSettings({ lastCheck: { time: Date.now(), total: last.total || ALL.length, bad } });
 }
 
 /* ---------- 编辑弹窗 ---------- */
@@ -181,8 +282,15 @@ function saveEdit() {
 }
 
 /* ---------- 不可达清单 ---------- */
+function badTagHtml(id) {
+  const s = STATUS[id];
+  if (s === 'site_down') return '<span class="bad-tag fault">网站故障</span>';
+  if (s === 'local_unreachable') return '<span class="bad-tag local">本地不可达</span>';
+  return '<span class="bad-tag">不可达</span>';
+}
+
 function renderBadPanel() {
-  const badIds = Object.keys(STATUS).filter((id) => STATUS[id] === 'bad');
+  const badIds = Object.keys(STATUS).filter((id) => isBad(id));
   const panel = $('badPanel');
   if (badIds.length === 0) { panel.classList.add('hidden'); return; }
   const list = badIds
@@ -199,13 +307,29 @@ function renderBadPanel() {
         <div class="name" title="${escapeHtml(b.title)}">${escapeHtml(b.title)}</div>
         <div class="url" title="${escapeHtml(b.url)}">${escapeHtml(b.url)}</div>
       </div>
+      ${badTagHtml(b.id)}
       <button class="btn ghost small" data-open="${escapeHtml(b.url)}">打开</button>
       <button class="btn ghost small" data-del="${b.id}">删除</button>
     </li>`).join('');
   $('badList').querySelectorAll('[data-open]').forEach((el) =>
-    el.addEventListener('click', () => chrome.tabs.create({ url: el.getAttribute('data-open') })));
+    el.addEventListener('click', () => openUrl(el.getAttribute('data-open'))));
   $('badList').querySelectorAll('[data-del]').forEach((el) =>
     el.addEventListener('click', () => { chrome.bookmarks.remove(el.getAttribute('data-del'), () => reload()); }));
+}
+
+/* ---------- 不可达清单：批量删除勾选项 ---------- */
+function deleteCheckedBad() {
+  const ids = Array.from(document.querySelectorAll('#badList .bad-ck:checked'))
+    .map((el) => el.getAttribute('data-id'));
+  if (ids.length === 0) { alert('请先勾选要删除的不可达书签（支持表头「全选」）'); return; }
+  if (!confirm(`确定删除勾选的 ${ids.length} 个不可达书签？此操作不可恢复。`)) return;
+  let done = 0;
+  ids.forEach((id) => {
+    chrome.bookmarks.remove(id, () => {
+      delete STATUS[id];
+      if (++done === ids.length) reload();
+    });
+  });
 }
 
 /* ---------- 不可达清单：勾选重检（不勾选则重检全部不可达） ---------- */
@@ -214,7 +338,7 @@ async function recheckBad() {
   const checkedIds = Array.from(document.querySelectorAll('#badList .bad-ck:checked'))
     .map((el) => el.getAttribute('data-id'));
   let list = Object.keys(STATUS)
-    .filter((id) => STATUS[id] === 'bad')
+    .filter((id) => isBad(id))
     .map((id) => ALL.find((x) => x.id === id))
     .filter((b) => b && /^https?:/i.test(b.url));
   if (checkedIds.length) list = list.filter((b) => checkedIds.includes(b.id));
@@ -240,10 +364,10 @@ async function recheckBad() {
 
   // 同步 lastCheck：保留仍不可达的 + 本次检出的新不可达
   const bad = Object.keys(STATUS)
-    .filter((id) => STATUS[id] === 'bad')
+    .filter((id) => isBad(id))
     .map((id) => {
       const b = ALL.find((x) => x.id === id);
-      return b ? { id: b.id, title: b.title, url: b.url } : null;
+      return b ? { id: b.id, title: b.title, url: b.url, status: STATUS[id] } : null;
     })
     .filter(Boolean);
   await setSettings({ lastCheck: { time: Date.now(), total: ALL.filter((b) => /^https?:/i.test(b.url)).length, bad } });
@@ -255,7 +379,7 @@ async function recheckBad() {
 
 function updateStat() {
   const folders = ROOTS.length;
-  const bad = Object.keys(STATUS).filter((id) => STATUS[id] === 'bad').length;
+  const bad = Object.keys(STATUS).filter((id) => isBad(id)).length;
   let s = `共 ${ALL.length} 个书签 · ${folders} 个分组`;
   if (bad) s += ` · 不可达 ${bad}`;
   $('stat').textContent = s;
@@ -266,7 +390,7 @@ async function checkValidity() {
   if (CHECKING) return;
   const targets = ALL.filter((b) => /^https?:/i.test(b.url));
   if (targets.length === 0) return;
-  if (!confirm('即将对 ' + targets.length + ' 个网页发起网络探测。\n\n注意：\n• 采用三重探测（no-cors GET → favicon 图片探测 → GET 重试）以降低误报；\n• 受浏览器安全策略(CORS)限制，本检测仅能判断「网络层是否可达」，无法准确识别 HTTP 404/500；\n• 无 favicon 且严格拦截探测的站点仍可能被误判，请在稳定网络环境下检测。')) {
+  if (!confirm('即将对 ' + targets.length + ' 个网页发起有效性检测。\n\n检测策略（规避本地网络误判）：\n• 本地四重探测：收到任何 HTTP 响应（含 Cloudflare 403 人机验证、429 限流）即判定「可达」，防护站不误判；\n• 本地打不开时，自动改用在线多节点检测工具（check-host.net）验证全球可达性；\n• 全球均不可达 → 标记「网站故障」；仅本地不可达、全球正常 → 标记「本地访问不可达」；\n• 在线服务偶发不可用时，保守标记为「本地访问不可达」。\n\n说明：在线检测由后台 Service Worker 发起，可能比纯本地检测稍慢，请耐心等待。')) {
     return;
   }
   CHECKING = true;
@@ -289,7 +413,7 @@ async function checkValidity() {
       const b = targets[i];
       const r = await probe(b.url);
       STATUS[b.id] = r;
-      if (r === 'bad') bad.push({ id: b.id, title: b.title, url: b.url });
+      if (r !== 'ok') bad.push({ id: b.id, title: b.title, url: b.url, status: r });
       // 节流刷新，避免频繁重排
       if (i % 10 === 0 || i === targets.length - 1) render();
     }
@@ -305,40 +429,11 @@ async function checkValidity() {
   render();
 }
 
-/* ---------- 导出弹窗：全部 / 自定义（分组或分组内书签） ---------- */
-function renderExpNode(node) {
-  if (node.url) {
-    return `<div class="exp-row leaf">
-      <input type="checkbox" class="exp-ck" data-id="${node.id}" />
-      <span class="exp-name" title="${escapeHtml(node.title)}">${escapeHtml(node.title)}</span>
-    </div>`;
-  }
-  const bm = node.children.filter((c) => c.url);
-  const folders = node.children.filter((c) => !c.url);
-  let inner = folders.map(renderExpNode).join('') +
-    bm.map(renderExpNode).join('');
-  return `<details class="exp-folder" open>
-    <summary>
-      <input type="checkbox" class="exp-ck exp-folder-ck" data-id="${node.id}" />
-      📁 ${escapeHtml(node.title || '未命名')}
-      <span class="count">(${countBookmarks(node)})</span>
-    </summary>
-    <div class="exp-children">${inner}</div>
-  </details>`;
-}
-
+/* ---------- 导出弹窗：全部 / 自定义（与弹窗共用 common.js 的导出树逻辑） ---------- */
 function openExport() {
-  $('expTree').innerHTML = ROOTS.filter((r) => !r.url && r.children)
-    .map(renderExpNode).join('') || '<div class="empty">暂无书签</div>';
+  $('expTree').innerHTML = renderExportTreeHtml(ROOTS);
+  bindExportChecks($('expTree'));
   $('exportModal').classList.remove('hidden');
-
-  // 勾选文件夹 → 联动勾选其全部后代
-  $('expTree').querySelectorAll('.exp-folder-ck').forEach((ck) => {
-    ck.addEventListener('change', () => {
-      const box = ck.closest('details');
-      box.querySelectorAll('.exp-ck').forEach((c) => { c.checked = ck.checked; });
-    });
-  });
 }
 
 function doExport() {
@@ -348,9 +443,7 @@ function doExport() {
   } else {
     const checked = new Set(Array.from($('expTree').querySelectorAll('.exp-ck:checked'))
       .map((el) => el.getAttribute('data-id')));
-    if (checked.size === 0) { alert('请至少勾选一个分组或书签'); return; }
-    const nodes = ROOTS.map((r) => pruneTree(r, checked)).filter(Boolean);
-    exportHtmlFromNodes(nodes);
+    if (!exportFromChecked(ROOTS, checked)) return;
   }
   closeExport();
 }
@@ -365,6 +458,9 @@ function reload() {
     const list = [];
     flattenTree(tree, '', list);
     ALL = list;
+    // 清理已不存在于书签中的勾选项
+    const ids = new Set(ALL.map((b) => b.id));
+    CHECKED = new Set(Array.from(CHECKED).filter((id) => ids.has(id)));
     render();
   });
 }
@@ -376,7 +472,7 @@ function init() {
     $('sort').value = sort;
     $('groupToggle').checked = groupByFolder;
     if (s.lastCheck && s.lastCheck.bad) {
-      s.lastCheck.bad.forEach((b) => { STATUS[b.id] = 'bad'; });
+      s.lastCheck.bad.forEach((b) => { STATUS[b.id] = b.status || 'bad'; });
     }
     reload();
   });
@@ -392,10 +488,27 @@ function init() {
     setSettings({ groupByFolder: groupByFolder });
     render();
   });
+  // 搜索范围：标题 / 网址 / 分组（与弹窗一致）
+  ['scTitle', 'scUrl', 'scGrp'].forEach((id) => {
+    $(id).addEventListener('change', () => render());
+  });
+  // 主列表勾选批量删除
+  $('selDelete').addEventListener('click', deleteCheckedRows);
+  $('selClear').addEventListener('click', clearChecked);
 
-  $('refresh').addEventListener('click', reload);
   $('help').addEventListener('click', () => {
     chrome.tabs.create({ url: chrome.runtime.getURL('help.html') });
+  });
+  // 右下角快速导航
+  $('toTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  $('toBottom').addEventListener('click', () => {
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+  });
+  // 书签变更自动同步（替代原「刷新」按钮：增删改书签后无需手动刷新）
+  let reloadTimer = null;
+  const scheduleReload = () => { clearTimeout(reloadTimer); reloadTimer = setTimeout(reload, 300); };
+  ['onCreated', 'onRemoved', 'onChanged', 'onMoved'].forEach((evt) => {
+    if (chrome.bookmarks[evt]) chrome.bookmarks[evt].addListener(scheduleReload);
   });
   $('export').addEventListener('click', openExport);
   $('exportCancel').addEventListener('click', closeExport);
@@ -403,7 +516,9 @@ function init() {
   $('exportModal').addEventListener('click', (e) => { if (e.target === $('exportModal')) closeExport(); });
   document.querySelectorAll('input[name="expMode"]').forEach((r) => {
     r.addEventListener('change', () => {
-      $('expTree').classList.toggle('hidden', r.value !== 'custom' || !r.checked);
+      const show = r.value === 'custom' && r.checked;
+      $('expTree').classList.toggle('hidden', !show);
+      $('expTip').classList.toggle('hidden', !show);
     });
   });
   $('import').addEventListener('click', () => {
@@ -411,6 +526,7 @@ function init() {
   });
   $('check').addEventListener('click', checkValidity);
   $('recheck').addEventListener('click', recheckBad);
+  $('badDelete').addEventListener('click', deleteCheckedBad);
   $('badAll').addEventListener('change', (e) => {
     const on = e.target.checked;
     document.querySelectorAll('#badList .bad-ck').forEach((ck) => { ck.checked = on; });

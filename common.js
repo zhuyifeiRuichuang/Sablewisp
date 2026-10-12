@@ -11,6 +11,21 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
+// 可直接在标签页打开的地址协议（http/https、本地文件、浏览器与扩展内页）。
+// Chrome 已禁用顶层导航到 javascript:/data: 等协议，扩展调用 chrome.tabs.create
+// 会被静默忽略；这里提前校验并给出明确提示，避免无反馈与非常规地址导航风险。
+function isOpenableUrl(url) {
+  return /^(https?|file|ftp|chrome|chrome-extension|view-source):/i.test(url || '');
+}
+
+function openUrl(url) {
+  if (!isOpenableUrl(url)) {
+    alert('浏览器不允许直接打开该类型地址：\n' + String(url).slice(0, 200));
+    return;
+  }
+  chrome.tabs.create({ url });
+}
+
 function domainOf(url) {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
@@ -65,22 +80,28 @@ function loadBookmarks() {
   });
 }
 
-// 网络层可达性探测（多策略，降低误报）：
-// 1) no-cors GET：只能判断网络层是否可达，无法识别 HTTP 404/500；
-// 2) favicon 图片探测：某些站点/代理环境下 fetch 栈异常，用 <img> 加载器绕过；
-// 3) GET 重试一次：排除瞬时网络抖动。
-// 任一策略成功即判定可达。
-function fetchProbe(url, timeout) {
+// 本地可达性探测（多策略，尽量反映真实访问体验）：
+// 扩展已声明 host_permissions: ["<all_urls>"]，扩展页 fetch 不受 CORS 限制，
+// 可用默认模式发起请求（无需 no-cors），服务器返回的任何 HTTP 响应都视为「本地可达」。
+// 关键判定：Cloudflare 等防护站点返回的 403 人机验证、429 限流、503 等响应，
+// 同样证明站点在本地网络层可达（真实浏览器打开后通过验证即可正常访问），
+// 不应误判为「本地访问不可达」。
+function statusProbe(url, timeout) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   return fetch(url, {
     method: 'GET',
-    mode: 'no-cors',
     cache: 'no-store',
+    credentials: 'omit',       // 不带站点 Cookie，模拟首次访客
     redirect: 'follow',
     signal: ctrl.signal
   })
-    .then(() => { clearTimeout(timer); return 'ok'; })
+    .then((res) => {
+      clearTimeout(timer);
+      // 不读取 body，尽早释放连接
+      if (res && res.body && res.body.cancel) { try { res.body.cancel(); } catch (e) { /* 忽略 */ } }
+      return 'ok';             // 收到任何 HTTP 状态码 → 服务器有响应 → 可达
+    })
     .catch(() => { clearTimeout(timer); return 'bad'; });
 }
 
@@ -102,12 +123,38 @@ function imgProbe(url, timeout) {
   });
 }
 
-async function probe(url, timeout = 10000) {
-  if (await fetchProbe(url, timeout) === 'ok') return 'ok';
+// 本地四重探测（任一成功即判定本地可达）：
+// 1) GET 可读状态探测（10s）：任何 HTTP 响应（含 CF 403/429/503 防护页）均算可达；
+// 2) favicon.ico 可读状态探测（8s）：favicon 404 也说明域名解析且服务器有响应；
+// 3) favicon 图片探测（8s）：绕过 fetch 栈限制的兜底；
+// 4) GET 重试（14s 长超时）：排除 Cloudflare 首次握手/挑战处理偏慢与瞬时网络抖动。
+async function localProbe(url) {
+  if (await statusProbe(url, 10000) === 'ok') return 'ok';
   let origin;
   try { origin = new URL(url).origin; } catch (e) { return 'bad'; }
-  if (await imgProbe(origin + '/favicon.ico', timeout) === 'ok') return 'ok';
-  return fetchProbe(url, timeout);
+  if (await statusProbe(origin + '/favicon.ico', 8000) === 'ok') return 'ok';
+  if (await imgProbe(origin + '/favicon.ico', 8000) === 'ok') return 'ok';
+  return statusProbe(url, 14000);
+}
+
+// 混合探测：优先本地快速探测；本地不可达时再走在线多节点检测（check-host.net），
+// 规避本地网络异常导致的误判。返回：'ok' | 'site_down' | 'local_unreachable' | 'bad'
+async function probe(url, timeout = 8000) {
+  // 1) 本地可达 → 直接判定可达（用户网络能打开，站点必然存活）
+  if (await localProbe(url, timeout) === 'ok') return 'ok';
+  // 2) 本地不可达 → 在线多节点检测给出「全球可达性」权威结论
+  try {
+    const res = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: 'onlineCheck', url }, (r) => {
+        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+        else resolve(r || {});
+      });
+    });
+    if (res.verdict === 'up') return 'local_unreachable';   // 全球可达，仅本地不可达
+    if (res.verdict === 'down') return 'site_down';          // 全球均不可达 → 网站故障
+    // verdict === 'error'：在线服务不可用，交由本地兜底
+  } catch (e) { /* 静默兜底 */ }
+  return 'local_unreachable';   // 无法在线验证时，保守标记为本地访问不可达
 }
 
 function getSettings() {
@@ -166,6 +213,57 @@ function pruneTree(node, checkedSet) {
     .filter(Boolean);
   if (children.length === 0) return null;
   return Object.assign({}, node, { children });
+}
+
+// 统计文件夹内书签总数（含子级）
+function countBookmarks(node) {
+  if (!node || !node.children) return 0;
+  return node.children.reduce((n, c) => n + (c.url ? 1 : countBookmarks(c)), 0);
+}
+
+// 渲染导出勾选树（弹窗与管理页共用，保证两边导出选项完全一致）：
+// 勾选分组 → 导出该分组整棵子树；展开分组只勾部分书签 → 仅导出勾选项（保留层级）
+function renderExportTreeHtml(roots) {
+  function renderNode(node) {
+    if (node.url) {
+      return `<div class="exp-row leaf">
+        <input type="checkbox" class="exp-ck" data-id="${node.id}" />
+        <span class="exp-name" title="${escapeHtml(node.title)}">${escapeHtml(node.title)}</span>
+      </div>`;
+    }
+    const bm = node.children.filter((c) => c.url);
+    const folders = node.children.filter((c) => !c.url);
+    const inner = folders.map(renderNode).join('') + bm.map(renderNode).join('');
+    return `<details class="exp-folder">
+      <summary>
+        <input type="checkbox" class="exp-ck exp-folder-ck" data-id="${node.id}" />
+        📁 ${escapeHtml(node.title || '未命名')}
+        <span class="count">(${countBookmarks(node)})</span>
+      </summary>
+      <div class="exp-children">${inner}</div>
+    </details>`;
+  }
+  return roots.filter((r) => !r.url && r.children).map(renderNode).join('')
+    || '<div class="empty">暂无书签</div>';
+}
+
+// 导出树勾选联动：勾选文件夹 → 勾选其全部后代
+function bindExportChecks(container) {
+  container.querySelectorAll('.exp-folder-ck').forEach((ck) => {
+    ck.addEventListener('change', () => {
+      const box = ck.closest('details');
+      box.querySelectorAll('.exp-ck').forEach((c) => { c.checked = ck.checked; });
+    });
+  });
+}
+
+// 按勾选集合执行选择性导出；返回是否已触发导出
+function exportFromChecked(roots, checkedSet) {
+  if (checkedSet.size === 0) { alert('请至少勾选一个分组或书签'); return false; }
+  const nodes = roots.map((r) => pruneTree(r, checkedSet)).filter(Boolean);
+  if (nodes.length === 0) { alert('勾选项无有效内容可导出'); return false; }
+  exportHtmlFromNodes(nodes);
+  return true;
 }
 
 // 导出 Netscape 书签 HTML（全部书签，平铺）
