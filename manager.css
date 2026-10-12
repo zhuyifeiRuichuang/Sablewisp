@@ -171,7 +171,12 @@ details.folder[open] > summary::before { transform: rotate(90deg); }
 .status { font-size: 11px; padding: 2px 8px; border-radius: 7px; flex: 0 0 auto; }
 .status.ok { background: #dcfce7; color: #15803d; }
 .status.bad { background: #fee2e2; color: #b91c1c; }
+.status.fault { background: #7f1d1d; color: #fff; }        /* 网站故障：深红，表示全球不可达 */
+.status.local { background: #ffedd5; color: #c2410c; }      /* 本地访问不可达：橙，提示本地网络问题 */
 .status.checking { background: #fef9c3; color: #a16207; }
+.bad-tag { font-size: 10px; padding: 1px 7px; border-radius: 6px; flex: 0 0 auto; }
+.bad-tag.fault { background: #7f1d1d; color: #fff; }
+.bad-tag.local { background: #ffedd5; color: #c2410c; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
 .dot.ok { background: #22c55e; }
 .dot.bad { background: #ef4444; }

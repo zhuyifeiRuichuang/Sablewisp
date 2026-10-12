@@ -102,12 +102,33 @@ function imgProbe(url, timeout) {
   });
 }
 
-async function probe(url, timeout = 10000) {
+// 本地三重探测（仅判断本地网络层是否可达；本地可达即视为可达，不触发在线检测）
+async function localProbe(url, timeout = 8000) {
   if (await fetchProbe(url, timeout) === 'ok') return 'ok';
   let origin;
   try { origin = new URL(url).origin; } catch (e) { return 'bad'; }
   if (await imgProbe(origin + '/favicon.ico', timeout) === 'ok') return 'ok';
   return fetchProbe(url, timeout);
+}
+
+// 混合探测：优先本地快速探测；本地不可达时再走在线多节点检测（check-host.net），
+// 规避本地网络异常导致的误判。返回：'ok' | 'site_down' | 'local_unreachable' | 'bad'
+async function probe(url, timeout = 8000) {
+  // 1) 本地可达 → 直接判定可达（用户网络能打开，站点必然存活）
+  if (await localProbe(url, timeout) === 'ok') return 'ok';
+  // 2) 本地不可达 → 在线多节点检测给出「全球可达性」权威结论
+  try {
+    const res = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: 'onlineCheck', url }, (r) => {
+        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+        else resolve(r || {});
+      });
+    });
+    if (res.verdict === 'up') return 'local_unreachable';   // 全球可达，仅本地不可达
+    if (res.verdict === 'down') return 'site_down';          // 全球均不可达 → 网站故障
+    // verdict === 'error'：在线服务不可用，交由本地兜底
+  } catch (e) { /* 静默兜底 */ }
+  return 'local_unreachable';   // 无法在线验证时，保守标记为本地访问不可达
 }
 
 function getSettings() {

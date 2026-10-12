@@ -15,12 +15,17 @@ function renderStat() {
   statEl.textContent = `共 ${ALL.length} 个书签` + (bad ? ` · 上次检测不可达 ${bad}` : '');
 }
 
+function badBadge(id) {
+  const s = BAD_MAP[id];
+  if (s === 'site_down') return '<span class="badge fault">网站故障</span>';
+  if (s === 'local_unreachable') return '<span class="badge local">本地不可达</span>';
+  return '<span class="badge bad">不可达</span>';
+}
+
 function itemHtml(b) {
   const dom = domainOf(b.url);
   const color = avatarColor(b.title + b.url);
-  const badge = BAD_MAP[b.id]
-    ? '<span class="badge bad">不可达</span>'
-    : '';
+  const badge = BAD_MAP[b.id] ? badBadge(b.id) : '';
   return `<li class="item" data-url="${escapeHtml(b.url)}">
     <div class="avatar" style="background:${color}">${escapeHtml(letterOf(b.title))}</div>
     <div class="meta">
@@ -99,7 +104,7 @@ async function checkValidity() {
   CHECKING = true;
   const targets = ALL.filter((b) => /^https?:/i.test(b.url));
   if (targets.length === 0) { CHECKING = false; return; }
-  if (!confirm('即将对 ' + targets.length + ' 个网页发起网络探测。\n\n注意：采用三重探测（GET → favicon → GET 重试）降低误报；受浏览器安全策略(CORS)限制，仅能判断「网络层是否可达」，无法准确识别 HTTP 404/500。请在稳定网络环境下检测。')) {
+  if (!confirm('即将对 ' + targets.length + ' 个网页发起有效性检测。\n\n检测策略（规避本地网络误判）：\n• 优先本地快速探测：本地能打开即判定「可达」；\n• 本地打不开时，自动改用在线多节点检测工具（check-host.net）验证全球可达性；\n• 全球均不可达 → 标记「网站故障」；仅本地不可达、全球正常 → 标记「本地访问不可达」；\n• 在线服务偶发不可用时，保守标记为「本地访问不可达」。\n\n说明：在线检测由后台 Service Worker 发起，可能比纯本地检测稍慢，请耐心等待。')) {
     CHECKING = false; return;
   }
   const bad = [];
@@ -111,15 +116,13 @@ async function checkValidity() {
       statEl.textContent = `检测中 ${i + 1}/${targets.length}…`;
       const b = targets[i];
       const r = await probe(b.url);
-      if (r === 'bad') bad.push({ id: b.id, title: b.title, url: b.url });
+      if (r !== 'ok') { BAD_MAP[b.id] = r; bad.push({ id: b.id, title: b.title, url: b.url, status: r }); }
     }
   }
   const pool = [];
   for (let i = 0; i < Math.min(CONC, targets.length); i++) pool.push(worker());
   await Promise.all(pool);
 
-  BAD_MAP = {};
-  bad.forEach((b) => { BAD_MAP[b.id] = true; });
   await setSettings({ lastCheck: { time: Date.now(), total: targets.length, bad } });
   renderStat();
   render();
@@ -257,7 +260,7 @@ function init() {
     ALL = list;
     getSettings().then((s) => {
       if (s.lastCheck && s.lastCheck.bad) {
-        s.lastCheck.bad.forEach((b) => { BAD_MAP[b.id] = true; });
+        s.lastCheck.bad.forEach((b) => { BAD_MAP[b.id] = b.status || 'bad'; });
       }
       renderStat();
       render();

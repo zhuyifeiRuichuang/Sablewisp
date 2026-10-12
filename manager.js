@@ -40,9 +40,17 @@ function sortBookmarks(arr) {
   return a;
 }
 
+// 不可达状态集合：bad（旧）/ site_down（网站故障）/ local_unreachable（本地访问不可达）
+function isBad(id) {
+  const s = STATUS[id];
+  return s === 'bad' || s === 'site_down' || s === 'local_unreachable';
+}
+
 function statusHtml(id) {
   const s = STATUS[id];
   if (s === 'checking') return '<span class="status checking"><span class="dot checking"></span>检测中</span>';
+  if (s === 'site_down') return '<span class="status fault"><span class="dot bad"></span>网站故障</span>';
+  if (s === 'local_unreachable') return '<span class="status local"><span class="dot bad"></span>本地访问不可达</span>';
   if (s === 'bad') return '<span class="status bad">不可达</span>';
   if (s === 'ok') return '<span class="status ok"><span class="dot ok"></span>可达</span>';
   return '';
@@ -195,8 +203,15 @@ function saveEdit() {
 }
 
 /* ---------- 不可达清单 ---------- */
+function badTagHtml(id) {
+  const s = STATUS[id];
+  if (s === 'site_down') return '<span class="bad-tag fault">网站故障</span>';
+  if (s === 'local_unreachable') return '<span class="bad-tag local">本地不可达</span>';
+  return '<span class="bad-tag">不可达</span>';
+}
+
 function renderBadPanel() {
-  const badIds = Object.keys(STATUS).filter((id) => STATUS[id] === 'bad');
+  const badIds = Object.keys(STATUS).filter((id) => isBad(id));
   const panel = $('badPanel');
   if (badIds.length === 0) { panel.classList.add('hidden'); return; }
   const list = badIds
@@ -213,6 +228,7 @@ function renderBadPanel() {
         <div class="name" title="${escapeHtml(b.title)}">${escapeHtml(b.title)}</div>
         <div class="url" title="${escapeHtml(b.url)}">${escapeHtml(b.url)}</div>
       </div>
+      ${badTagHtml(b.id)}
       <button class="btn ghost small" data-open="${escapeHtml(b.url)}">打开</button>
       <button class="btn ghost small" data-del="${b.id}">删除</button>
     </li>`).join('');
@@ -243,7 +259,7 @@ async function recheckBad() {
   const checkedIds = Array.from(document.querySelectorAll('#badList .bad-ck:checked'))
     .map((el) => el.getAttribute('data-id'));
   let list = Object.keys(STATUS)
-    .filter((id) => STATUS[id] === 'bad')
+    .filter((id) => isBad(id))
     .map((id) => ALL.find((x) => x.id === id))
     .filter((b) => b && /^https?:/i.test(b.url));
   if (checkedIds.length) list = list.filter((b) => checkedIds.includes(b.id));
@@ -269,10 +285,10 @@ async function recheckBad() {
 
   // 同步 lastCheck：保留仍不可达的 + 本次检出的新不可达
   const bad = Object.keys(STATUS)
-    .filter((id) => STATUS[id] === 'bad')
+    .filter((id) => isBad(id))
     .map((id) => {
       const b = ALL.find((x) => x.id === id);
-      return b ? { id: b.id, title: b.title, url: b.url } : null;
+      return b ? { id: b.id, title: b.title, url: b.url, status: STATUS[id] } : null;
     })
     .filter(Boolean);
   await setSettings({ lastCheck: { time: Date.now(), total: ALL.filter((b) => /^https?:/i.test(b.url)).length, bad } });
@@ -284,7 +300,7 @@ async function recheckBad() {
 
 function updateStat() {
   const folders = ROOTS.length;
-  const bad = Object.keys(STATUS).filter((id) => STATUS[id] === 'bad').length;
+  const bad = Object.keys(STATUS).filter((id) => isBad(id)).length;
   let s = `共 ${ALL.length} 个书签 · ${folders} 个分组`;
   if (bad) s += ` · 不可达 ${bad}`;
   $('stat').textContent = s;
@@ -295,7 +311,7 @@ async function checkValidity() {
   if (CHECKING) return;
   const targets = ALL.filter((b) => /^https?:/i.test(b.url));
   if (targets.length === 0) return;
-  if (!confirm('即将对 ' + targets.length + ' 个网页发起网络探测。\n\n注意：\n• 采用三重探测（no-cors GET → favicon 图片探测 → GET 重试）以降低误报；\n• 受浏览器安全策略(CORS)限制，本检测仅能判断「网络层是否可达」，无法准确识别 HTTP 404/500；\n• 无 favicon 且严格拦截探测的站点仍可能被误判，请在稳定网络环境下检测。')) {
+  if (!confirm('即将对 ' + targets.length + ' 个网页发起有效性检测。\n\n检测策略（规避本地网络误判）：\n• 优先本地快速探测：本地能打开即判定「可达」；\n• 本地打不开时，自动改用在线多节点检测工具（check-host.net）验证全球可达性；\n• 全球均不可达 → 标记「网站故障」；仅本地不可达、全球正常 → 标记「本地访问不可达」；\n• 在线服务偶发不可用时，保守标记为「本地访问不可达」。\n\n说明：在线检测由后台 Service Worker 发起，可能比纯本地检测稍慢，请耐心等待。')) {
     return;
   }
   CHECKING = true;
@@ -318,7 +334,7 @@ async function checkValidity() {
       const b = targets[i];
       const r = await probe(b.url);
       STATUS[b.id] = r;
-      if (r === 'bad') bad.push({ id: b.id, title: b.title, url: b.url });
+      if (r !== 'ok') bad.push({ id: b.id, title: b.title, url: b.url, status: r });
       // 节流刷新，避免频繁重排
       if (i % 10 === 0 || i === targets.length - 1) render();
     }
@@ -374,7 +390,7 @@ function init() {
     $('sort').value = sort;
     $('groupToggle').checked = groupByFolder;
     if (s.lastCheck && s.lastCheck.bad) {
-      s.lastCheck.bad.forEach((b) => { STATUS[b.id] = 'bad'; });
+      s.lastCheck.bad.forEach((b) => { STATUS[b.id] = b.status || 'bad'; });
     }
     reload();
   });
